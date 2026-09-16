@@ -56,6 +56,10 @@
 | token 计费 + 上下文统计 | agent_body/stats.py | ✅ |
 | TUI 多表面（对话/任务/设置/用量） | agent_body/tui.py | ✅ 真机验证 |
 | Rust 内核（记忆/检索/状态） | superbrain-2.0 | ✅ 独立仓库 |
+| 存储规划（五区布局+保留时长回收） | agent_body/storage.py | ✅ |
+| 资产文件夹（skills/MCP/截图分类） | agent_body/assets.py | ✅ |
+| 图片系统（统一存放+PNG压缩入库） | agent_body/images.py | ✅ |
+| 密码本（加密+可解密+分级+防误伤） | agent_body/vault.py | ✅ |
 
 **总测试数：80 全绿。** 这些是地基，后期规划全部建立在它们之上。
 

@@ -11,6 +11,10 @@ from . import config as cfg
 from .context import ProjectContext
 from .curate import Curator
 from .budget import ContextBudget, estimate_tokens
+from .storage import Storage
+from .assets import AssetStore
+from .images import ImageStore
+from .vault import Vault
 
 
 class BodyPolicy:
@@ -44,8 +48,25 @@ class Body:
         self.project = ProjectContext(str(data_dir))
         self.curator = Curator()
         self.budget = ContextBudget(str(data_dir))
+        # Phase 4 存储/资产/图片 + Phase 5 密码本
+        self.storage = Storage(data_dir)
+        self.assets = AssetStore(self.storage)
+        self.images = ImageStore(self.assets)
+        self.vault_path = self.storage.config("vault.json")  # 密码本落点
         self.tools = ["read_file", "write_file", "shell", "search_files",
                       "web_search", "web_extract", "memory"]
+
+    # ---- Phase 4/5 便捷入口（供 CLI/TUI/Bot 用）----
+    def open_vault(self, master_password: str) -> Vault:
+        """打开（或首次创建）密码本。主密码不落盘，仅用于派生密钥。"""
+        return Vault(self.data_dir, master_password)
+
+    def gc(self, dry_run: bool = False) -> dict:
+        """按保留时长回收过期资产/缓存。"""
+        return self.storage.collect_garbage(dry_run=dry_run)
+
+    def storage_report(self) -> dict:
+        return self.storage.size_report()
 
     def _path(self, path):
         target = (self.workspace / path).resolve()

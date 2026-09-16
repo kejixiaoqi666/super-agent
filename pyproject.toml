@@ -20,6 +20,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# 图片压缩入库（Pillow）
+image = ["Pillow>=10.0.0"]
+# 密码本加密（cryptography）
+vault = ["cryptography>=41.0.0"]
 # 装机时拉取 superbrain 内核：pip install 'super-agent[brain]' 或安装脚本自动处理
 brain = []
 
