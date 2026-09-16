@@ -1,6 +1,5 @@
 import tempfile
 import unittest
-from pathlib import Path
 
 from memory_plane.core import Store, Conflict, MemoryError, BudgetExceeded
 

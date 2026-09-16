@@ -1,9 +1,9 @@
 """Single-threaded body. Kernel instances and SQLite connections stay on their owner thread."""
-import hashlib
-import json
 import subprocess
 import time
 from pathlib import Path
+
+from .kernel import BrainTool, default_registry
 
 
 class BodyPolicy:
@@ -64,32 +64,32 @@ class Body:
         if not isinstance(session, str) or not session.strip():
             raise ValueError("session must be a nonempty string")
         if session not in self.brains:
-            from superbrain2 import SuperBrain
-            from superbrain2.core.agent import AgentConfig
-            from superbrain2.core.memory.store import MemoryStore
-            from superbrain2.core.tools import ToolRegistry, Tool
-            key = hashlib.sha256(session.encode()).hexdigest()
-            store = MemoryStore(str(self.data_dir / (key + ".db")))
+            # 走孔位层实例化大脑；参数显式传入（不同 session 各自独立实例）。
+            # 大脑是独立更新的内核，身体不直接 import 内核内部 → 内核升级/换内核不触碰身体。
+            port = default_registry().build(
+                "superbrain",
+                data_dir=str(self.data_dir), session=session,
+                llm=self.llm, enable_learning=self.llm is None)
+            if not port.ready():
+                port.close()
+                raise RuntimeError("superbrain kernel not ready: " +
+                                   str(port.health()))
+            tools = [
+                BrainTool("read_file", "Read a UTF-8 workspace file",
+                          {"path": {"type": "string"}}, self._read, "read"),
+                BrainTool("write_file", "Write a UTF-8 workspace file",
+                          {"path": {"type": "string"}, "content": {"type": "string"}},
+                          self._write, "write"),
+                BrainTool("exec", "Run a shell command in workspace (30 second timeout)",
+                          {"command": {"type": "string"}}, self._exec, "exec"),
+            ]
             try:
-                brain = SuperBrain(llm=self.llm, store=store,
-                                   config=AgentConfig(enable_learning=self.llm is None))
-                brain.load()
-                registry = ToolRegistry()
-                specs = [
-                    ("read_file", "Read a UTF-8 workspace file", self._read, "read", {"path": {"type": "string"}}),
-                    ("write_file", "Write a UTF-8 workspace file", self._write, "write", {"path": {"type": "string"}, "content": {"type": "string"}}),
-                    ("exec", "Run a shell command in workspace (30 second timeout)", self._exec, "exec", {"command": {"type": "string"}}),
-                ]
-                for name, desc, handler, effect, props in specs:
-                    registry.register(Tool(name, desc, {"type": "object", "properties": props,
-                                                       "required": list(props)}, handler,
-                                           side_effects=effect))
-                brain.agent.tools = registry
-                brain.agent.permissions = self.policy
-                self.brains[session] = brain
+                port.attach_tools(tools)
+                port.set_permissions(self.policy)
             except Exception:
-                store.close()
+                port.close()
                 raise
+            self.brains[session] = port
         return self.brains[session]
 
     def chat(self, session, message, person_id=None):

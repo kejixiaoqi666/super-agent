@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
-from memory_plane.client import MemoryClient, ClientError
+from memory_plane.client import MemoryClient
 
 
 ROOT = Path(__file__).parents[1]

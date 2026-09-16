@@ -62,13 +62,13 @@ class BodyTests(unittest.TestCase):
                 self.assertIn("Observed", reply["reply"])
                 self.assertEqual((root / "work" / "result.txt").read_text(), "body works")
                 body.brain("a").remember("session alpha private fact")
-                self.assertEqual(body.brain("b").agent.store.count_nodes(), 0)
+                self.assertEqual(body.brain("b").memory_count(), 0)
                 body.brain("a").set_personality_mode("guided")
             finally:
                 body.close()
             reopened = Body(root / "state", root / "work", llm=ScriptedModel())
             try:
-                self.assertGreater(reopened.brain("a").agent.store.count_nodes(), 0)
+                self.assertGreater(reopened.brain("a").memory_count(), 0)
                 self.assertEqual(reopened.brain("a").personality_mode(), "guided")
                 self.assertIn("thoughts", reopened.tick("a"))
             finally:
