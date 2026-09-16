@@ -1,0 +1,94 @@
+name: release
+
+# 打 tag 触发（如 git tag v0.3.0 && git push origin v0.3.0），
+# 自动构建多平台 Python 包，创建 GitHub Release 并上传资产。
+# 也可手动触发（Actions → Release → Run workflow）。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-wheel (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build deps
+        run: python -m pip install --upgrade build
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/
+          if-no-files-found: error
+
+  # 只在一个平台上做资产命名统一 + 生成 install 脚本，供 release 上传
+  package-assets:
+    name: assemble-release-assets
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: _artifacts
+          merge-multiple: true
+
+      - name: Assemble assets dir
+        shell: bash
+        run: |
+          mkdir -p _assets
+          # 收集所有平台构建出的 wheel/sdist
+          cp _artifacts/*.whl _artifacts/*.tar.gz _assets/ 2>/dev/null || true
+          # 附带一键安装脚本
+          cp install.sh install.ps1 _assets/ 2>/dev/null || true
+          ls -la _assets/
+
+      - name: Create Release & upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Super-Agent ${{ github.ref_name }}
+          body: |
+            ## Super-Agent ${{ github.ref_name }}
+
+            **安装**（Linux/macOS）:
+            ```bash
+            curl -fsSL https://github.com/kejixiaoqi666/super-agent/releases/latest/download/install.sh | bash
+            ```
+
+            **安装**（Windows PowerShell）:
+            ```powershell
+            irm https://github.com/kejixiaoqi666/super-agent/releases/latest/download/install.ps1 | iex
+            ```
+
+            或 pip 直装:
+            ```bash
+            pip install super-agent
+            ```
+
+            各平台 wheel + sdist 见下方 Assets。
+          draft: false
+          prerelease: false
+          files: _assets/*

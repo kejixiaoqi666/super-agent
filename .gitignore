@@ -7,3 +7,6 @@ __pycache__/
 *.pyc
 *.sqlite*
 evidence/ui-*.png
+build/
+dist/
+*.egg-info/

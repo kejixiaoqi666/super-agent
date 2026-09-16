@@ -8,7 +8,39 @@
 
 SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能接入 SuperBrain 2.0 的 Python 内核，提供 CLI、Telegram 私聊轮询、工作目录文件工具、Shell 工具、会话隔离、状态持久化和可配置执行模式。
 
-以下正文保留 Memory Plane 的控制面说明。
+---
+
+## 发布与安装
+
+打 `v*` 标签即自动触发 [GitHub Actions 发布工作流](.github/workflows/release.yml)，构建多平台 Python wheel，创建 GitHub Release 并附带一键安装脚本。
+
+**一键安装**（Linux / macOS）:
+
+```bash
+curl -fsSL https://github.com/kejixiaoqi666/super-agent/releases/latest/download/install.sh | bash
+```
+
+**一键安装**（Windows PowerShell）:
+
+```powershell
+irm https://github.com/kejixiaoqi666/super-agent/releases/latest/download/install.ps1 | iex
+```
+
+**手动发布**：打标签即可
+
+```bash
+git tag v0.3.0 && git push origin v0.3.0
+```
+
+**pip 直装**:
+
+```bash
+pip install super-agent      # 或指定版本 pip install super-agent==0.3.0
+```
+
+安装后 `sa` 命令可用（`sa --help` 看选项；`sa --telegram` 启用 TG 轮询）。大脑内核 `superbrain-2.0` 为独立仓库，按 [BODY.md](BODY.md) 说明接入。
+
+---
 
 ## 新增：SuperBrain 2.0 身体层
 

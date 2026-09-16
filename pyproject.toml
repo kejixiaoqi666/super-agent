@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "super-agent"
+version = "0.3.0"
+description = "SuperBrain 2.0 身体层——像操作系统一样调度资源、不会越用越坏的智能体载体"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "kejixiaoqi666" }]
+keywords = ["agent", "superbrain", "llm", "context", "assistant"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+# 装机时拉取 superbrain 内核：pip install 'super-agent[brain]' 或安装脚本自动处理
+brain = []
+
+[project.scripts]
+sa = "agent_body.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "agent_body",
+    "agent_body.exec",
+    "agent_body.kernel",
+    "agent_body.loop",
+    "agent_body.safety",
+    "memory_plane",
+]
+
+[tool.setuptools.package-data]
+agent_body = ["py.typed"]
