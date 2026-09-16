@@ -114,15 +114,6 @@ class BudgetTest(unittest.TestCase):
             self.assertFalse(b.over_budget("s1"))  # 归档后腾出
             self.assertEqual(b.status()["archives"], 1)
 
-    def test_trim_messages(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            b = ContextBudget(tmp)
-            hist = [{"role": "system", "content": "sys"}] + \
-                   [{"role": "user", "content": f"m{i}"} for i in range(30)]
-            trimmed = b.trim_messages(hist, keep_last=5)
-            self.assertIn({"role": "system", "content": "sys"}, trimmed)  # 系统保留
-            self.assertEqual(len([m for m in trimmed if m["role"] != "system"]), 5)
-
 
 if __name__ == "__main__":
     unittest.main()

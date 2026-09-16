@@ -1,7 +1,9 @@
-"""上下文预算 Budget —— token 计量 + 超预算自动压缩归档。
+"""上下文预算 Budget —— token 计量 + 超预算信号。
 
-你要的"上下文不能只增不减"：给每次会话设 token 预算，超了自动压缩/归档旧消息，
-把空间留给真正重要的新信息。
+你要的"上下文不能只增不减"：当前架构里多轮会话上下文由大脑内核统一管理
+（身体每次只发单个 prompt，不持有历史列表），所以真正的压缩/归档由内核负责。
+身体侧的 Budget 职责 = 精确记账 + 暴露 over_budget 信号（供前端/后续内核压缩钩子用），
+不做身体层历史裁剪（body 无历史可裁，避免留下死代码假象）。
 
 估算策略：中文≈1 token/字，英文≈1 token/4字符（与内核 estimate_tokens 对齐）。
 """
@@ -24,11 +26,16 @@ def estimate_tokens(text: str) -> int:
 
 
 class ContextBudget:
-    """会话级 token 预算管理。"""
+    """会话级 token 预算管理：记账 + 超预算信号。
+
+    max_tokens: 预算上限；archive_at: 达到该比例触发压缩信号（默认80%）。
+    注：身体不持有对话历史，故不做 body 层历史裁剪；over_budget 作为信号
+    暴露给调用方（未来可对接内核压缩钩子 / 前端展示）。
+    """
 
     def __init__(self, data_dir: str | Path, max_tokens: int = 16000,
                  archive_at: float = 0.8):
-        """max_tokens: 预算上限；archive_at: 达到该比例触发归档（默认80%）。"""
+        """max_tokens: 预算上限；archive_at: 达到该比例触发压缩信号（默认80%）。"""
         self.max_tokens = max_tokens
         self.archive_at = archive_at
         self.path = Path(data_dir) / "budget.json"
@@ -64,14 +71,14 @@ class ContextBudget:
             session, {"prompt": 0, "completion": 0, "messages": 0})
 
     def over_budget(self, session: str) -> bool:
-        """当前会话是否已达归档触发线。"""
+        """当前会话是否已达压缩触发线（信号，供调用方决定是否压缩/归档）。"""
         u = self.session_usage(session)
         total = u["prompt"] + u["completion"]
         return total >= self.max_tokens * self.archive_at
 
-    # ---- 归档 ----
+    # ---- 归档（保留：移动当前 usage 到历史，供前端查看历史用量） ----
     def archive(self, session: str) -> dict:
-        """归档旧会话：把当前 usage 移到历史，重置当前（腾出预算）。"""
+        """把当前会话 usage 归档到历史并重置（供前端/审计查看，非上下文压缩）。"""
         u = self.usage["sessions"].pop(session, None) or {}
         self.usage.setdefault("archive", []).append({
             "session": session, "usage": u, "archived_at": time.time()})
@@ -79,15 +86,6 @@ class ContextBudget:
         self.usage["archive"] = self.usage["archive"][-50:]
         self._save()
         return u
-
-    def trim_messages(self, history: List[dict], keep_last: int = 20) -> List[dict]:
-        """超预算时压缩历史：只保留系统提示 + 最近 keep_last 条。"""
-        if len(history) <= keep_last:
-            return history
-        # 保留系统消息（role=system）在最前，其余只留最近 keep_last
-        system = [m for m in history if m.get("role") == "system"]
-        tail = history[-keep_last:]
-        return system + tail
 
     def status(self) -> dict:
         return {
