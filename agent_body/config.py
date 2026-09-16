@@ -73,12 +73,18 @@ def save(values: dict, env_path: str | Path | None = None) -> str:
     return str(path)
 
 
+def _llm_key_ready(cfg) -> bool:
+    """LLM key 是否就绪：LLM_API_KEY（环境变量）或 SUPERBRAIN_LLM_KEY（.env）。"""
+    return bool(cfg.get("SUPERBRAIN_LLM_KEY")
+                or os.environ.get("LLM_API_KEY"))
+
+
 def has_required() -> bool:
     """bot + 至少一个 LLM 通道已配。"""
     cfg = load()
     return bool(cfg.get("TELEGRAM_BOT_TOKEN") and
                 cfg.get("TELEGRAM_ALLOWED_USERS") and
-                (cfg.get("SUPERBRAIN_LLM_KEY") or os.environ.get("LLM_API_KEY")))
+                _llm_key_ready(cfg))
 
 
 def mask(value: str) -> str:
@@ -98,8 +104,7 @@ def status_report() -> dict:
         v = cfg.get(k, "")
         out[k] = {"desc": desc, "set": bool(v),
                   "value": mask(v) if sensitive else (v or "(未设置)")}
-    out["llm_key_ready"] = bool(cfg.get("SUPERBRAIN_LLM_KEY")
-                                or os.environ.get("LLM_API_KEY"))
+    out["llm_key_ready"] = _llm_key_ready(cfg)
     return out
 
 

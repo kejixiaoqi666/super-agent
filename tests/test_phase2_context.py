@@ -12,9 +12,9 @@ class ProjectContextTest(unittest.TestCase):
     def test_set_and_describe(self):
         with tempfile.TemporaryDirectory() as tmp:
             pc = ProjectContext(tmp)
-            pc.set_project("网络面板", "修网关转发bug", tags=["panel", "gateway"])
+            pc.set_project("面板项目", "修网关转发bug", tags=["panel", "gateway"])
             d = pc.describe()
-            self.assertIn("网络面板", d)
+            self.assertIn("面板项目", d)
             self.assertIn("修网关转发bug", d)
             self.assertIn("gateway", d)
 
