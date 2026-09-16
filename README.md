@@ -2,7 +2,7 @@
 
 > SuperBrain 2.0 的身体层：让大脑能够对话、调用工具、接入 Bot 并持续运行。
 
-[身体层说明](BODY.md) · [大脑孔位层](KERNEL.md) · [SuperBrain 2.0 内核](https://github.com/kejixiaoqi666/superbrain-2.0)
+[身体层说明](BODY.md) · [大脑孔位层](KERNEL.md) · [总体规划](docs/MASTER_PLAN.md) · [详细技术方案](docs/ROADMAP.md) · [SuperBrain 2.0 内核](https://github.com/kejixiaoqi666/superbrain-2.0)
 
 ## 当前状态
 
