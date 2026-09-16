@@ -13,7 +13,6 @@ ROADMAP §6/§7 落地：对话产生的一切资产统一落在资产区，按�
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from .storage import Storage
 

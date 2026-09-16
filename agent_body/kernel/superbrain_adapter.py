@@ -27,7 +27,6 @@ def _ensure_kernel_symbols():
 
     返回 None 表示成功；返回异常表示内核不可用（health() 如实报告）。
     """
-    import sys
     global SuperBrain, AgentConfig, MemoryStore, Tool, ToolRegistry, _KERNEL_IMPORT_ERROR
     if SuperBrain is not None:
         return None  # 已绑定

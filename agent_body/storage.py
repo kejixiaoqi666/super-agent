@@ -17,10 +17,8 @@ ROADMAP §6 落地：把 agent 的各类数据分到五个存储区，各管各�
 """
 from __future__ import annotations
 
-import shutil
 import time
 from pathlib import Path
-from typing import Optional
 
 
 class Storage:

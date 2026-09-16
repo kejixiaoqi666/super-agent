@@ -12,7 +12,7 @@ from agent_body.vault import Vault
 class StorageTest(unittest.TestCase):
     def test_five_zones_created(self):
         with tempfile.TemporaryDirectory() as tmp:
-            s = Storage(tmp, retention_days=30)
+            Storage(tmp, retention_days=30)
             for sub in ("config", "ledger", "memory", "assets", "cache"):
                 self.assertTrue((Path(tmp) / sub).is_dir())
 
@@ -45,9 +45,9 @@ class StorageTest(unittest.TestCase):
 
     def test_size_report(self):
         with tempfile.TemporaryDirectory() as tmp:
-            s = Storage(tmp)
-            (s.ledger_dir / "a.json").write_text("12345")
-            rep = s.size_report()
+            storage_obj = Storage(tmp)
+            (storage_obj.ledger_dir / "a.json").write_text("12345")
+            rep = storage_obj.size_report()
             self.assertGreater(rep["ledger"], 0)
 
 
@@ -82,10 +82,10 @@ class ImageStoreTest(unittest.TestCase):
 
     def test_ingest_png_unified(self):
         with tempfile.TemporaryDirectory() as tmp:
-            s = Storage(tmp)
-            a = AssetStore(s)
+            storage_obj = Storage(tmp)
+            a = AssetStore(storage_obj)
             src = Path(tmp) / "shot.png"
-            orig = self._make_png(src)
+            self._make_png(src)
             im = ImageStore(a, compress_quality=80)
             r = im.ingest(src, session="chat-1")
             self.assertTrue(r.path.exists())

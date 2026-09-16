@@ -10,6 +10,27 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 
 ---
 
+## 已落地能力（Phase 1-5）
+
+| 阶段 | 能力 | 模块 |
+|---|---|---|
+| P1 稳定性 | 死循环防护 / 自查模块 / 连贯任务队列 / 熔断重试 / 沙箱 | `loop/` `safety/` |
+| P2 上下文治理 | 项目感知精挑输入 / 工具惰性注入 / 记忆分层 recall / token 预算 | `context.py` `curate.py` `budget.py` |
+| P3 客户端 | Rust 跨平台启动器（对接身体层 `sa`） | `client/` |
+| P4 资产与存储 | 五区存储布局 / 资产分类挂载 / 图片统一存放+PNG压缩入库 / 保留时长回收 | `storage.py` `assets.py` `images.py` |
+| P5 密码本 | 加密存储 / 主密码派生(不落盘) / 凭据分级 / 支付级防误伤 | `vault.py` |
+
+**常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
+
+```
+/storage    查看五区存储占用
+/gc         回收超保留时长的过期资产(资产区+缓存区)
+/image <路径> [session]   图片压缩入库(默认转PNG)
+/vault      密码本操作(需 --vault-master 启动)
+```
+
+---
+
 ## 发布与安装
 
 打 `v*` 标签即自动触发 [GitHub Actions 发布工作流](.github/workflows/release.yml)，构建多平台 Python wheel，创建 GitHub Release 并附带一键安装脚本。
