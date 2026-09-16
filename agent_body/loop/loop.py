@@ -22,11 +22,23 @@ from typing import Callable, Optional
 from .task import TaskState, TaskStatus, TaskStore
 from .verify import VerificationGate
 from .failure import FailureClassifier
+from ..safety import (CircuitBreaker, CircuitOpenError, SelfCheck,)
+
+
+def _safe_recheck(brain, goal: str) -> bool:
+    """复验：让大脑快速确认目标是否已达成（简单对话，不调工具）。"""
+    try:
+        r = brain.chat(f"快速检查：目标'{goal}'是否已完成？只回复 是/否")
+        return "是" in r or "yes" in r.lower() or "完成" in r
+    except Exception:
+        return False
 
 
 class AgentLoop:
     def __init__(self, data_dir, workspace, brain_factory: Callable,
-                 llm=None, max_steps: int = 8):
+                 llm=None, max_steps: int = 8,
+                 breaker: Optional[CircuitBreaker] = None,
+                 selfcheck: Optional[SelfCheck] = None):
         """brain_factory(session) -> BrainPort：从身体拿到当前会话的大脑。"""
         self.store = TaskStore(data_dir)
         self.workspace = workspace
@@ -34,6 +46,9 @@ class AgentLoop:
         self.llm = llm
         self.max_steps = max_steps
         self.classifier = FailureClassifier()
+        # 稳定性组件：熔断器（防死循环）+ 自查模块（失败后诊断/自愈）
+        self.breaker = breaker or CircuitBreaker()
+        self.selfcheck = selfcheck or SelfCheck()
 
     # ---- 生命周期 ----
     def submit(self, goal: str, owner: str = "local",
@@ -95,17 +110,41 @@ class AgentLoop:
                 return t.summary()
             step = t.plan[idx]
             try:
+                # 熔断检查：目标若已熔断，直接快速失败，不再尝试
+                if not self.breaker.allow():
+                    raise CircuitOpenError(t.goal, self.breaker.state)
                 # 大脑自主执行这一步（思考 + 调工具）
                 result = brain.chat(
                     f"任务步骤（第{idx + 1}/{len(t.plan)}步）: {step}\n"
                     f"整体目标: {t.goal}\n请完成这一步。需要工具就调用工具。")
+                self.breaker.record_success()
             except Exception as exc:
+                # 失败分类
                 fc = self.classifier.classify(str(exc))
+                # 熔断记录：保留原始失败分类，仅注明熔断
+                if isinstance(exc, CircuitOpenError):
+                    t.record_step(idx, step, f"熔断快速失败: {exc}", ok=False)
+                    t.set_failure(fc["category"], f"熔断快速失败({exc})")
+                    t.transition(TaskStatus.FAILED)
+                    self.store.save(t)
+                    return t.summary()
+                self.breaker.record_failure()
                 t.record_step(idx, step, str(exc), ok=False)
-                t.set_failure(fc["category"], fc["reason"])
+                # 自查模块：诊断 → 自愈 → 复验（失败后的第一动作）
+                report = self.selfcheck.run(
+                    t.goal, category=fc["category"],
+                    recheck=lambda goal: _safe_recheck(brain, goal))
+                t.record_selfcheck(report.to_dict())
+                # 自查成功（自愈 + 复验通过）→ 重试该步（消耗一次重试预算）
+                if report.ok and idx not in {s.get("index") for s in t.steps if s.get("ok")}:
+                    # 清掉刚才那条失败记录，重跑该步（用重试预算换一次机会）
+                    t.steps = [s for s in t.steps if not (s.get("index") == idx and not s.get("ok"))]
+                    self.store.save(t)
+                    continue
+                t.set_failure(fc["category"], fc["reason"] + " | " + " | ".join(report.findings))
                 t.transition(TaskStatus.FAILED)
                 self.store.save(t)
-                return t.summary()
+                return {**t.summary(), "selfchecks": t.selfchecks}
             t.record_step(idx, step, result, ok=True)
             self.store.save(t)
             idx = t.next_pending_step()

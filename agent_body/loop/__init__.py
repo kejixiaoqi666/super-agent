@@ -7,7 +7,8 @@
                                         │
                   交付回复 + 记忆记录 + 断点续跑
 
-机制：任务状态机 · 验证门禁 · 失败分类 · 记忆记录 · 断点续跑 · 权限分层 · 可观测。
+机制：任务状态机 · 验证门禁 · 失败分类 · 记忆记录 · 断点续跑 · 权限分层 · 可观测
+     · 连贯任务队列 · 未完成清单 · 进度条。
 
 定位：大脑负责思考/人格/单轮工具循环（内核已内置）；本模块在身体层补上
 「跨任务生命周期」——状态、验证、续跑、记录。符合「大脑=核心，身体=执行+逻辑」。
@@ -16,10 +17,14 @@ from .task import TaskState, TaskStatus, TaskStore
 from .loop import AgentLoop
 from .verify import VerificationGate, Evidence
 from .failure import FailureClassifier
+from .queue import QueueItem, TaskQueue
+from .progress import render_progress, render_step_list, summarize
 
 __all__ = [
     "TaskState", "TaskStatus", "TaskStore",
     "AgentLoop",
     "VerificationGate", "Evidence",
     "FailureClassifier",
+    "QueueItem", "TaskQueue",
+    "render_progress", "render_step_list", "summarize",
 ]

@@ -43,15 +43,17 @@ class TaskState:
 
     def __init__(self, goal: str, task_id: Optional[str] = None,
                  plan: Optional[List[str]] = None,
-                 owner: str = "local"):
+                 owner: str = "local", chain_id: Optional[str] = None):
         self.task_id = task_id or uuid.uuid4().hex[:12]
         self.goal = goal
         self.owner = owner
+        self.chain_id = chain_id
         self.status = TaskStatus.PENDING
         self.plan: List[str] = plan or []
         self.steps: List[Dict] = []      # 每步: {index, action, result, ok}
         self.evidence: List[Dict] = []   # 验收证据
         self.failure: Optional[Dict] = None   # 失败分类
+        self.selfchecks: List[Dict] = []      # 自查记录: {phase, findings, healed, ok}
         self.error: Optional[str] = None
         self.created_at = time.time()
         self.updated_at = self.created_at
@@ -98,12 +100,17 @@ class TaskState:
         self.error = f"[{category}] {reason}"
         self.updated_at = time.time()
 
+    def record_selfcheck(self, report: dict) -> None:
+        self.selfchecks.append(dict(report))
+        self.updated_at = time.time()
+
     # ---- 序列化 ----
     def to_dict(self) -> dict:
         return {
             "task_id": self.task_id, "goal": self.goal, "owner": self.owner,
-            "status": self.status.value, "plan": self.plan,
-            "steps": self.steps, "evidence": self.evidence,
+            "chain_id": self.chain_id, "status": self.status.value,
+            "plan": self.plan, "steps": self.steps,
+            "evidence": self.evidence, "selfchecks": self.selfchecks,
             "failure": self.failure, "error": self.error,
             "created_at": self.created_at, "updated_at": self.updated_at,
         }
@@ -111,10 +118,11 @@ class TaskState:
     @classmethod
     def from_dict(cls, d: dict) -> "TaskState":
         t = cls(d["goal"], task_id=d["task_id"], plan=d.get("plan"),
-                owner=d.get("owner", "local"))
+                owner=d.get("owner", "local"), chain_id=d.get("chain_id"))
         t.status = TaskStatus(d["status"])
         t.steps = d.get("steps", [])
         t.evidence = d.get("evidence", [])
+        t.selfchecks = d.get("selfchecks", [])
         t.failure = d.get("failure")
         t.error = d.get("error")
         t.created_at = d.get("created_at", time.time())
