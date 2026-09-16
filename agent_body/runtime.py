@@ -2,11 +2,15 @@
 import subprocess
 import time
 from pathlib import Path
+from typing import Optional, List
 
 from .kernel import BrainTool, default_registry
 from .loop import AgentLoop, VerificationGate
 from .stats import TokenStats
 from . import config as cfg
+from .context import ProjectContext
+from .curate import Curator
+from .budget import ContextBudget, estimate_tokens
 
 
 class BodyPolicy:
@@ -36,6 +40,12 @@ class Body:
         self.stats = TokenStats(str(data_dir))
         # 当前对话模型（供计费换算）
         self.model = cfg.load().get("SUPERBRAIN_LLM_MODEL", "default")
+        # Phase 2 上下文治理：项目感知精挑输入 + 上下文预算
+        self.project = ProjectContext(str(data_dir))
+        self.curator = Curator()
+        self.budget = ContextBudget(str(data_dir))
+        self.tools = ["read_file", "write_file", "shell", "search_files",
+                      "web_search", "web_extract", "memory"]
 
     def _path(self, path):
         target = (self.workspace / path).resolve()
@@ -106,14 +116,37 @@ class Body:
             raise ValueError("message must be a nonempty string")
         brain = self.brain(session)
         started = time.monotonic()
-        reply = brain.chat(message, person_id=person_id or session)
+        # 项目感知精挑：只喂相关记忆/工具线索，不塞废话
+        curated = self.curator.curate(brain, self.project, message, self.tools)
+        prompt = curated.to_prompt()
+        reply = brain.chat(prompt, person_id=person_id or session)
         brain.save()
-        # token 计费 + 上下文统计（不影响对话，仅记账）
+        # token 计费 + 上下文统计 + 预算记账
         try:
+            pt = estimate_tokens(prompt)
+            ct = estimate_tokens(reply)
             self.stats.record(session, message, reply, model=self.model)
+            self.budget.record(session, pt, ct)
         except Exception:
             pass
-        return {"reply": reply, "elapsed_seconds": round(time.monotonic() - started, 3)}
+        return {
+            "reply": reply,
+            "elapsed_seconds": round(time.monotonic() - started, 3),
+            "dropped_memory": curated.dropped,
+        }
+
+    def set_project(self, project: str, goal: str = "",
+                    tags: Optional[List[str]] = None, focus: str = "") -> dict:
+        """设定当前项目上下文（供 CLI/TUI 调用）。"""
+        self.project.set_project(project, goal, tags, focus)
+        return {"set": project, "goal": goal, "tags": tags or []}
+
+    def context_status(self) -> dict:
+        return {
+            "project": self.project.describe(),
+            "budget": self.budget.status(),
+            "tools": len(self.tools),
+        }
 
     def tick(self, session):
         brain = self.brain(session)

@@ -73,7 +73,7 @@ def main():
     try:
         call_with_retry(lambda: ping_server(UNREACHABLE_HOST),
                         max_retries=3, base_backoff=0.2, timeout=2)
-    except Exception as e:
+    except Exception:
         elapsed = round(time.time() - t0, 2)
         print(f"\n[重试预算] 连失败，{elapsed}s 内耗尽预算后放弃（不空转）→ 交由缺陷查")
 
