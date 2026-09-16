@@ -3,7 +3,6 @@
 验证：提交任务 → 大脑规划 → 身体工具执行(写文件) → 验证门禁(文件存在) → 记忆记录。
 """
 import json
-import os
 import sys
 import tempfile
 from pathlib import Path

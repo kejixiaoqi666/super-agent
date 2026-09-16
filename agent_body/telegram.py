@@ -1,16 +1,27 @@
-"""Private Telegram chats, polling, explicit sender allowlist; no tokens in files."""
+"""Private Telegram chats, polling, explicit sender allowlist; tokens come from .env (not code)."""
 import json
 import logging
 import os
 import time
 import urllib.request
 
+from . import config as cfg
+
 
 def serve(body):
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
-    allowed = {int(x.strip()) for x in os.environ["TELEGRAM_ALLOWED_USERS"].split(",") if x.strip()}
+    # 正常流程：token/授权从 .env 读取（config 层），环境变量优先，绝不硬编码进代码。
+    conf = cfg.load()
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or conf.get("TELEGRAM_BOT_TOKEN", "")
+    raw_allowed = (os.environ.get("TELEGRAM_ALLOWED_USERS")
+                   or conf.get("TELEGRAM_ALLOWED_USERS", ""))
+    if not token:
+        raise SystemExit(
+            "未配置 TELEGRAM_BOT_TOKEN。请运行 `python -m agent_body.config` 或 TUI "
+            "的「配置」填入机器人 token（@BotFather 获取）。")
+    allowed = {int(x.strip()) for x in raw_allowed.split(",") if x.strip()}
     if not allowed:
-        raise ValueError("TELEGRAM_ALLOWED_USERS must not be empty")
+        raise SystemExit(
+            "未配置 TELEGRAM_ALLOWED_USERS。请在配置里填入你的 Telegram 数字 ID（逗号分隔）。")
     checkpoint = body.data_dir / "telegram-offset.json"
     offset = json.loads(checkpoint.read_text()) if checkpoint.exists() else 0
 

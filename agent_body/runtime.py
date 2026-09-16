@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .kernel import BrainTool, default_registry
 from .loop import AgentLoop, VerificationGate
+from .stats import TokenStats
+from . import config as cfg
 
 
 class BodyPolicy:
@@ -30,6 +32,10 @@ class Body:
         self.closed = False
         # AgentLoop：自主执行引擎（任务状态机/验证门禁/记忆记录/断点续跑）
         self.loop = AgentLoop(str(data_dir), workspace, self.brain)
+        # TokenStats：token 计费 + 上下文统计
+        self.stats = TokenStats(str(data_dir))
+        # 当前对话模型（供计费换算）
+        self.model = cfg.load().get("SUPERBRAIN_LLM_MODEL", "default")
 
     def _path(self, path):
         target = (self.workspace / path).resolve()
@@ -102,6 +108,11 @@ class Body:
         started = time.monotonic()
         reply = brain.chat(message, person_id=person_id or session)
         brain.save()
+        # token 计费 + 上下文统计（不影响对话，仅记账）
+        try:
+            self.stats.record(session, message, reply, model=self.model)
+        except Exception:
+            pass
         return {"reply": reply, "elapsed_seconds": round(time.monotonic() - started, 3)}
 
     def tick(self, session):

@@ -1,0 +1,5 @@
+# Super-Agent 依赖
+# 安装: pip install -r requirements.txt
+# 大脑内核(superbrain-2.0)为独立仓库,与 super-agent 分开更新:
+#    pip install -e /path/to/superbrain-2.0
+rich>=13.0.0        # TUI 界面(对话/任务/配置/用量)
