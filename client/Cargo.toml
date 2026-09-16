@@ -1,0 +1,13 @@
+[package]
+name = "sa-client"
+version = "0.1.0"
+edition = "2021"
+description = "Super-Agent 客户端壳：本地压缩执行 + 跨平台入口，对接 Python 身体层(sa)"
+license = "MIT"
+
+[[bin]]
+name = "sa"
+path = "src/main.rs"
+
+[dependencies]
+# 跨平台子进程调用（调 Python 身体层）
