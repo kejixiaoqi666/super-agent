@@ -1,4 +1,14 @@
-# SPA（Super-Agent）\n\n> SuperBrain 2.0 的身体层：让大脑能够对话、调用工具、接入 Bot 并持续运行。\n\n[身体层说明](BODY.md) · [SuperBrain 2.0 内核](https://github.com/kejixiaoqi666/superbrain-2.0)\n\n## 当前状态\n\nSPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能接入 SuperBrain 2.0 的 Python 内核，提供 CLI、Telegram 私聊轮询、工作目录文件工具、Shell 工具、会话隔离、状态持久化和可配置执行模式。\n\n以下正文保留 Memory Plane 的控制面说明。
+# Super-Agent（SPA）
+
+> SuperBrain 2.0 的身体层：让大脑能够对话、调用工具、接入 Bot 并持续运行。
+
+[身体层说明](BODY.md) · [SuperBrain 2.0 内核](https://github.com/kejixiaoqi666/superbrain-2.0)
+
+## 当前状态
+
+SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能接入 SuperBrain 2.0 的 Python 内核，提供 CLI、Telegram 私聊轮询、工作目录文件工具、Shell 工具、会话隔离、状态持久化和可配置执行模式。
+
+以下正文保留 Memory Plane 的控制面说明。
 
 ## 新增：SuperBrain 2.0 身体层
 
@@ -46,4 +56,5 @@ API 默认仅绑定 `127.0.0.1`，MVP 使用请求级 SQLite 连接并以 `max_w
 当前 `agentd` 和 EchoProvider 是本地契约实现，不代表已连接真实服务或具有生产级权限。生产接入必须补上 IPC 身份认证、真实 Secret Broker、Telegram OAuth/API、SSH Executor、持久任务表和独立 supervisor。
 
 Hermes 的实时 Gateway IPC、SessionDB/FTS5 会话全文导入、真实 OAuth/API 登录和 Provider 调用仍未接入；当前适配层保持只读，以免污染现有 Hermes 安装。
+
 
