@@ -1,0 +1,8 @@
+data/
+.body-data/
+*.db
+.env
+__pycache__/
+*.pyc
+*.sqlite*
+evidence/ui-*.png

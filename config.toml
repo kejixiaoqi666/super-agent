@@ -1,0 +1,13 @@
+[memory]
+# Relative to this config file; can point to a dedicated local disk.
+data_root = "data"
+owner = "local-owner"
+context_budget_bytes = 12000
+max_records_per_owner = 50000
+
+[server]
+host = "127.0.0.1"
+port = 8765
+token_env = "AGENTWORKBENCH_TOKEN"
+max_workers = 8
+request_timeout = 10
