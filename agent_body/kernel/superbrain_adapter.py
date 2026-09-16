@@ -12,13 +12,35 @@ from typing import List, Optional
 from .port import BrainPort, BrainTool
 
 _KERNEL_IMPORT_ERROR = None
-try:
-    from superbrain2 import SuperBrain
-    from superbrain2.core.agent import AgentConfig
-    from superbrain2.core.memory.store import MemoryStore
-    from superbrain2.core.tools import Tool, ToolRegistry
-except Exception as _exc:  # 内核缺装时保留错误，health() 如实报告
-    _KERNEL_IMPORT_ERROR = _exc
+
+# 内核符号延迟绑定：模块导入时内核可能未装/未进 sys.path，故不在此硬 import。
+# 探测到内核后由 _ensure_kernel_symbols() 动态绑定到模块命名空间，成功前一切为 None。
+SuperBrain = None
+AgentConfig = None
+MemoryStore = None
+Tool = None
+ToolRegistry = None
+
+
+def _ensure_kernel_symbols():
+    """导入 superbrain2 并把需要的符号绑定到模块命名空间。
+
+    返回 None 表示成功；返回异常表示内核不可用（health() 如实报告）。
+    """
+    import sys
+    global SuperBrain, AgentConfig, MemoryStore, Tool, ToolRegistry, _KERNEL_IMPORT_ERROR
+    if SuperBrain is not None:
+        return None  # 已绑定
+    try:
+        from superbrain2 import SuperBrain
+        from superbrain2.core.agent import AgentConfig
+        from superbrain2.core.memory.store import MemoryStore
+        from superbrain2.core.tools import Tool, ToolRegistry
+        _KERNEL_IMPORT_ERROR = None
+        return None
+    except Exception as exc:
+        _KERNEL_IMPORT_ERROR = exc
+        return exc
 
 
 class SuperBrainAdapter(BrainPort):
@@ -32,17 +54,28 @@ class SuperBrainAdapter(BrainPort):
         self._session = session
         self._data_dir = Path(data_dir).resolve()
         self._data_dir.mkdir(parents=True, exist_ok=True)
-        if _KERNEL_IMPORT_ERROR is not None:
-            self._errors.append(_KERNEL_IMPORT_ERROR)
+        # 未显式指定内核路径时自动探测并插入 sys.path，再尝试加载内核。
+        # （模块顶部 import 可能因内核缺装已失败；此处探测后重试，避免"测试能过/真跑崩"）。
+        kp = Path(kernel_path).resolve() if kernel_path is not None \
+            else self._find_kernel()
+        if kp is not None:
+            import sys
+            if str(kp) not in sys.path:
+                sys.path.insert(0, str(kp))
+        err = self._ensure_kernel_symbols()
+        if err is not None:
+            self._errors.append(err)
             self._brain = None
             return
-        self._brain = self._build(llm, kernel_path, enable_learning)
+        self._brain = self._build(llm, enable_learning)
+
+    @staticmethod
+    def _ensure_kernel_symbols():
+        """确保内核符号已绑定；成功返回 None，失败返回异常。"""
+        return _ensure_kernel_symbols()
 
     # ---- 装配 ----
-    def _build(self, llm, kernel_path, enable_learning):
-        if kernel_path is not None:
-            import sys
-            sys.path.insert(0, str(Path(kernel_path).resolve()))
+    def _build(self, llm, enable_learning):
         key = hashlib.sha256(self._session.encode()).hexdigest()
         store = MemoryStore(str(self._data_dir / (key + ".db")))
         try:
@@ -55,6 +88,27 @@ class SuperBrainAdapter(BrainPort):
         except Exception:
             store.close()
             raise
+
+    @staticmethod
+    def _find_kernel():
+        """自动探测 superbrain-2.0 内核 Python 目录（未显式指定 kernel_path 时兜底）。
+
+        常见布局：<repo>/superbrain-2.0/python 或环境变量 SUPERBRAIN_KERNEL_PATH。
+        找不到返回 None（health() 会如实报告，不硬崩）。
+        """
+        candidates = []
+        env = __import__("os").environ.get("SUPERBRAIN_KERNEL_PATH")
+        if env:
+            candidates.append(Path(env))
+        # 相对本文件向上找：agent_body/kernel/ -> 项目根/superbrain-2.0/python
+        here = Path(__file__).resolve()
+        candidates.append(here.parents[2] / "superbrain-2.0" / "python")
+        candidates.append(here.parents[3] / "superbrain-2.0" / "python")
+        for c in candidates:
+            p = Path(c).resolve()
+            if (p / "superbrain2").exists():
+                return p
+        return None
 
     # ---- BrainPort 实现：委托给 superbrain2 门面 ----
     def _require_brain(self):

@@ -6,7 +6,7 @@
 
 - **大脑孔位层（kernel/）**：agent 通过稳定契约 `BrainPort` 调用大脑，不直接 import 内核内部；
   registry 插件机制支持换内核而 agent 主体零改动，契约版本感知，BrainPort 是 ABC 拦截不完整实现。
-  详见 [KERNEL.md](KERNEL.md)。25 测试全绿。
+  详见 [KERNEL.md](KERNEL.md)。孔位层专项测试全绿。
 - SuperBrain 的真实聊天循环调用身体工具，接收结果后继续回复。
 - 文件读写、Shell 执行、CLI 对话和 Telegram 私聊轮询入口。
 - 每个 session 使用 SHA-256 命名的独立 SQLite；重启恢复认知、人格和会话状态。
