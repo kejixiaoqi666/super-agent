@@ -35,6 +35,15 @@ def main():
                     print(json.dumps(body.brain(args.session).state(), ensure_ascii=False, default=str))
                 elif message == "/tick":
                     print(json.dumps(body.tick(args.session), ensure_ascii=False, default=str))
+                elif message.startswith("/task "):
+                    # /task <目标> —— 提交并运行自主任务
+                    print(json.dumps(body.run_task(message[6:].strip(), session=args.session),
+                                     ensure_ascii=False, default=str))
+                elif message == "/tasks":
+                    print(json.dumps(body.task_status(), ensure_ascii=False, default=str))
+                elif message.startswith("/task-cancel "):
+                    print(json.dumps(body.task_cancel(message[13:].strip()),
+                                     ensure_ascii=False, default=str))
                 else:
                     print(body.chat(args.session, message)["reply"])
     finally:

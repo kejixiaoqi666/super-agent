@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from .kernel import BrainTool, default_registry
+from .loop import AgentLoop, VerificationGate
 
 
 class BodyPolicy:
@@ -27,6 +28,8 @@ class Body:
         self.llm = llm
         self.brains = {}
         self.closed = False
+        # AgentLoop：自主执行引擎（任务状态机/验证门禁/记忆记录/断点续跑）
+        self.loop = AgentLoop(str(data_dir), workspace, self.brain)
 
     def _path(self, path):
         target = (self.workspace / path).resolve()
@@ -106,6 +109,35 @@ class Body:
         result = brain.tick()
         brain.save()
         return result
+
+    # ---- AgentLoop 接入：任务驱动自主执行 ----
+    def run_task(self, goal, session="task", owner="local",
+                 verify_claims=None):
+        """提交并运行一个自主任务，返回任务摘要。
+
+        verify_claims: [{claim, kind, path/content/...}, ...] 可选，交付前验收。
+        """
+        brain = self.brain(session)
+        task = self.loop.submit(goal, owner=owner)
+        gate = None
+        if verify_claims:
+            gate = VerificationGate(self.workspace)
+            for c in verify_claims:
+                claim = c.pop("claim"); kind = c.pop("kind")
+                gate.add(claim, kind, **c)
+        return self.loop.run(task.task_id, brain, verifier=gate)
+
+    def task_status(self, task_id=None):
+        """查任务进度；task_id 缺省列出所有任务摘要。"""
+        if task_id:
+            return self.loop.status(task_id)
+        return [t.summary() for t in self.loop.store.list()]
+
+    def task_cancel(self, task_id):
+        return self.loop.cancel(task_id)
+
+    def task_delete(self, task_id):
+        return self.loop.delete(task_id)
 
     def close(self):
         errors = []

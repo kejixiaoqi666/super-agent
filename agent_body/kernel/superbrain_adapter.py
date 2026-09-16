@@ -180,7 +180,7 @@ class SuperBrainAdapter(BrainPort):
     def version(self):
         try:
             import superbrain2 as _sb
-            return getattr(_sb.metadata, "version", "unknown")
+            return getattr(_sb, "__version__", "unknown")
         except Exception:
             return "unknown"
 
