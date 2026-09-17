@@ -97,5 +97,60 @@ class SkillStoreTest(unittest.TestCase):
         self.assertIn("n", s.names())
 
 
+class MatchTextTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        _write(self.root, "ops/SKILL.md",
+               "---\nname: airport-ops\ndescription: 机场节点运维排障\n---\n"
+               "排查节点线路卡顿不稳定、延迟高的步骤")
+        _write(self.root, "unrelated/SKILL.md",
+               "---\nname: cooking\ndescription: 菜谱\n---\n今天晚饭番茄炒蛋")
+
+    def test_match_text_chinese_bigram(self):
+        s = SkillStore(self.root)
+        hits = s.match_text("节点卡顿延迟高怎么办")
+        self.assertEqual([h.name for h in hits], ["airport-ops"])
+
+    def test_match_text_picks_right_domain(self):
+        s = SkillStore(self.root)
+        hits = s.match_text("番茄炒蛋怎么做")
+        self.assertEqual([h.name for h in hits], ["cooking"])
+        # 且不会误匹配机场技能
+        self.assertNotIn("airport-ops", [h.name for h in hits])
+
+    def test_match_text_empty_and_min_overlap(self):
+        s = SkillStore(self.root)
+        self.assertEqual(s.match_text(""), [])
+        self.assertEqual(s.match_text("xyz"), [])  # 与两技能都无重叠
+
+    def test_bigrams(self):
+        self.assertEqual(SkillStore.bigrams("ab"), {"ab"})
+        self.assertIn("节点", SkillStore.bigrams("节点卡顿"))
+        self.assertEqual(SkillStore.bigrams(""), set())
+
+
+class CurateInjectionTest(unittest.TestCase):
+    def test_curate_injects_matching_skill(self):
+        from agent_body.context import ProjectContext
+        from agent_body.curate import Curator
+        root = Path(tempfile.mkdtemp())
+        _write(root, "ops/SKILL.md",
+               "---\nname: ops\ndescription: 节点运维\n---\n排查卡顿步骤: 重启")
+        store = SkillStore(root)
+        ctx = ProjectContext(str(root))
+        curator = Curator()
+
+        class _FakeBrain:
+            def recall(self, *a, **k):
+                return []
+
+        out = curator.curate(_FakeBrain(), ctx, "节点卡顿怎么排查", skills_store=store)
+        self.assertEqual(len(out.skills), 1)
+        self.assertIn("重启", out.skills[0])
+        prompt = out.to_prompt()
+        self.assertIn("参考技能", prompt)
+        self.assertIn("重启", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

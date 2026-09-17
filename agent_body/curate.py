@@ -22,6 +22,7 @@ class CuratedContext:
     project_line: str = ""
     relevant_memory: List[str] = field(default_factory=list)
     tool_hints: List[str] = field(default_factory=list)
+    skills: List[str] = field(default_factory=list)
     message: str = ""
     dropped: int = 0          # 被过滤掉的相关记忆条数
 
@@ -33,6 +34,8 @@ class CuratedContext:
         if self.relevant_memory:
             parts.append("相关记忆:\n" + "\n".join(
                 f"- {m[:120]}" for m in self.relevant_memory[:6]))
+        if self.skills:
+            parts.append("参考技能:\n" + "\n".join(self.skills[:3]))
         if self.tool_hints:
             parts.append("可用工具线索: " + " ".join(self.tool_hints[:8]))
         parts.append(self.message)
@@ -58,13 +61,15 @@ class Curator:
         return False
 
     def curate(self, brain, ctx: ProjectContext, message: str,
-               all_tools: Optional[List[str]] = None) -> CuratedContext:
-        """精挑：用项目上下文过滤记忆 + 工具，拼上下文包。
+               all_tools: Optional[List[str]] = None,
+               skills_store=None) -> CuratedContext:
+        """精挑：用项目上下文过滤记忆 + 工具 + 自动注入相关技能，拼上下文包。
 
         brain: BrainPort（须有 recall(query, k)）
         ctx:   当前项目上下文
         message: 本次输入
         all_tools: 全部可用工具名（可选，用于惰性注入）
+        skills_store: 技能仓库（可选，按消息自动匹配相关技能注入）
         """
         out = CuratedContext(
             project_line=ctx.describe(),
@@ -101,4 +106,12 @@ class Curator:
                     out.tool_hints = all_tools[:5]  # 兜底给少量
             else:
                 out.tool_hints = all_tools[:5]  # 无标签给少量核心
+
+        # 3) 技能自动注入：按消息 bigram 匹配相关技能，把指令拼进上下文
+        if skills_store is not None:
+            try:
+                for skill in skills_store.match_text(message, k=3):
+                    out.skills.append(skill.render_instructions())
+            except Exception:
+                pass
         return out

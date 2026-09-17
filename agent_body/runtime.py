@@ -281,7 +281,8 @@ class Body:
         started = time.monotonic()
         # 项目感知精挑：只喂相关记忆/工具线索，不塞废话
         with self.tracer.span("curate", session=session):
-            curated = self.curator.curate(brain, self.project, message, self.tools)
+            curated = self.curator.curate(brain, self.project, message,
+                                          self.tools, skills_store=self.skills)
             prompt = curated.to_prompt()
         with self.tracer.span("chat", session=session):
             reply = brain.chat(prompt, person_id=person_id or session)

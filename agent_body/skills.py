@@ -120,6 +120,30 @@ class SkillStore:
         return [s for s in self.list()
                 if any(k in (s.description + s.body).lower() for k in kw)]
 
+    # ---- 中文友好的自动匹配（字符 bigram 重叠，无需分词）----
+    @staticmethod
+    def bigrams(text: str) -> set:
+        """提取字符二元组（中英混合都适用）；用于子串相似度匹配。"""
+        t = text.strip()
+        if len(t) <= 1:
+            return {t} if t else set()
+        return {t[i:i + 2] for i in range(len(t) - 1)}
+
+    def match_text(self, text: str, k: int = 3, min_overlap: int = 2) -> List[Skill]:
+        """按消息与技能(name+description+body)的字符 bigram 重叠自动选技能（中文不需要
+        分词器）。达到 min_overlap 个重叠二元组的技能按重叠数降序，取前 k 个。"""
+        qb = self.bigrams(text or "")
+        if not qb:
+            return []
+        scored = []
+        for s in self.list():
+            hay = (s.name + " " + s.description + " " + s.body)
+            overlap = len(qb & self.bigrams(hay))
+            if overlap >= min_overlap:
+                scored.append((overlap, s))
+        scored.sort(key=lambda t: -t[0])
+        return [s for _, s in scored[:k]]
+
     def instructions(self, *names: str, include_body: bool = True) -> str:
         """把若干技能渲染成一块注入上下文的指令。未知名字静默跳过。"""
         return "\n\n".join(
