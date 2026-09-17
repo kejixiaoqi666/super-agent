@@ -28,9 +28,10 @@ def _menu() -> str:
         "[dim]大脑思考 · 身体执行 · 自主任务[/dim]\n\n"
         "[1] 💬 对话      [2] 📋 自主任务\n"
         "[3] ⚙️ 配置      [4] 📊 用量统计\n"
-        "[5] 🚀 启动对话  [0] 退出",
+        "[5] 🚀 启动对话  [6] 🔧 工具箱\n"
+        "[0] 退出",
         border_style="cyan"))
-    return Prompt.ask("选择", choices=["1", "2", "3", "4", "5", "0"], default="1")
+    return Prompt.ask("选择", choices=["1", "2", "3", "4", "5", "6", "0"], default="1")
 
 
 def _chat(body, console):
@@ -95,6 +96,63 @@ def _usage(body, console):
         console.print(td)
 
 
+def _cron(body, console):
+    console.print("[dim]定时任务[/dim]")
+    while True:
+        op = Prompt.ask("操作", choices=["list", "add", "rm", "run", "back"],
+                        default="list")
+        if op == "back":
+            break
+        if op == "list":
+            for j in body.cron_list():
+                console.print(f"- {j['id']} 规格={j['spec']} "
+                              f"下次={j['next_run']} 已跑{j['count']}次")
+        elif op == "add":
+            jid = Prompt.ask("任务id")
+            spec = Prompt.ask("规格(@every 30m | 五段cron | @ISO)")
+            prompt = Prompt.ask("提示词(可空)")
+            try:
+                job = body.cron_add(jid, spec, payload={"prompt": prompt})
+                console.print(f"[green]✅ {jid} -> 下次 {job['next_run']}[/green]")
+            except ValueError as e:
+                console.print(f"[red]规格无效: {e}[/red]")
+        elif op == "rm":
+            jid = Prompt.ask("任务id")
+            console.print("已删除" if body.cron_rm(jid) else "不存在")
+        elif op == "run":
+            ran = body.cron_run_due()
+            console.print("(无到期任务)" if not ran else f"已执行: {ran}")
+
+
+def _tools(body, console):
+    console.print("[bold]🔧 工具箱[/bold]（会话检索 / 委派 / 定时任务 / 技能）")
+    while True:
+        act = Prompt.ask("功能", choices=["search", "delegate", "cron", "skills",
+                                        "back"], default="back")
+        if act == "back":
+            break
+        if act == "search":
+            q = Prompt.ask("检索关键词")
+            hits = body.search_sessions(q)
+            if not hits:
+                console.print("(无命中)")
+            for h in hits[:10]:
+                if "error" in h:
+                    console.print(f"[red]{h['error']}[/red]")
+                else:
+                    console.print(f"[{h['session']}] {h['snip']}")
+        elif act == "delegate":
+            goal = Prompt.ask("委派目标")
+            r = body.delegate(goal)
+            console.print(Panel(r.get("summary") or "(空)", title="子代理结果",
+                                border_style="magenta", box=box.ROUNDED))
+        elif act == "cron":
+            _cron(body, console)
+        elif act == "skills":
+            for s in body.scan_skills():
+                console.print(f"- {s['name']} v{s['version']} {s['description']}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Super-Agent TUI")
     ap.add_argument("--workspace", default=".", help="工作目录")
@@ -120,6 +178,8 @@ def main(argv=None):
                 _usage(body, c)
             elif choice == "5":
                 _chat(body, c)  # 启动对话
+            elif choice == "6":
+                _tools(body, c)
     finally:
         body.close()
     c.print("[dim]再见 👋[/dim]")
