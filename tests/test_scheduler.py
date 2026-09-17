@@ -119,6 +119,23 @@ class SchedulerTest(unittest.TestCase):
         self.assertIn("o", s2.jobs)
         self.assertEqual(s2.jobs["j"]["spec"], "@every 30m")
 
+    def test_runner_exception_isolated(self):
+        # 一个任务 runner 抛错：不崩 run_due，其它任务照常，错误被记录
+        self.s.add("bad", "@every 1h")
+        self.s.add("good", "@every 1h")
+        self.s.jobs["bad"]["next_run"] = _epoch(2026, 9, 18, 11, 0)
+        self.s.jobs["good"]["next_run"] = _epoch(2026, 9, 18, 11, 0)
+
+        def runner(job):
+            if job["id"] == "bad":
+                raise RuntimeError("boom")
+            self.ran.append(job["id"])
+        self.assertEqual(self.s.run_due(_epoch(2026, 9, 18, 11, 0),
+                                        runner=runner), ["bad", "good"])
+        self.assertEqual(self.ran, ["good"])  # bad 失败不阻塞 good
+        self.assertIn("boom", self.s.jobs["bad"]["last_error"])
+        self.assertIsNone(self.s.jobs["good"]["last_error"])
+
     def test_missing_dir_created(self):
         import os
         s = CronScheduler(os.path.join(self.tmp, "sub", "dir"))

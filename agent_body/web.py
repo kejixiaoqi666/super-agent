@@ -23,15 +23,30 @@ class WebError(RuntimeError):
     """网页/搜索失败（清晰报错，供上层转告）。"""
 
 
+_MAX_BYTES = 4 * 1024 * 1024  # 单页下载上限 4MB，防超大/恶意页吃内存
+
+
 def _get(url: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    charset = None
+    data = b""
     try:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
-            data = r.read()
+            try:
+                charset = r.headers.get_content_charset()
+            except Exception:
+                charset = None
+            chunk = r.read(1 << 16)  # 分块读，超上限即中止
+            while chunk:
+                data += chunk
+                if len(data) > _MAX_BYTES:
+                    raise WebError(f"页面超过上限 {_MAX_BYTES // 1024}KB")
+                chunk = r.read(1 << 16)
+    except WebError:
+        raise
     except Exception as e:
         raise WebError(f"抓取失败 {url}: {e}") from None
     # 尽力按 charset 解码；失败则 errors=replace
-    charset = r.headers.get_content_charset() if hasattr(r, "headers") else None
     try:
         return data.decode(charset or "utf-8", errors="replace")
     except Exception:

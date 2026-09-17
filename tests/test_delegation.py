@@ -95,5 +95,35 @@ class ParallelTest(unittest.TestCase):
         self.assertIn("ctx1", outs[0]["summary"])
 
 
+class _Raising(Provider):
+    """complete 恒抛错，测并行/工具派发的异常隔离。"""
+    name = "raising"
+
+    def complete(self, request):
+        raise RuntimeError("provider boom")
+
+
+class RobustnessTest(unittest.TestCase):
+    def test_parallel_isolates_worker_exception(self):
+        outs = parallel_delegate(_Raising(),
+                                 [("任务A", ""), ("任务B", "")], max_concurrent=2)
+        self.assertEqual(len(outs), 2)
+        for o in outs:
+            self.assertIn("子代理异常", o["summary"])
+
+    def test_subagent_tool_dispatch_error_handled(self):
+        def bad_dispatch(name, args):
+            raise RuntimeError("tool boom")
+        r = _Scripted([{"content": "", "tool_calls": _tool_call("ls", "{}")},
+                       {"content": "done", "tool_calls": []}])
+        out = delegate_task(r, "x", tool_dispatch=bad_dispatch,
+                            tools=({"name": "ls"},))
+        self.assertEqual(out["summary"], "done")  # 工具错误回传，子代理继续
+        # 验证工具错误进入了后续请求
+        last = r.calls[-1]
+        tool_msgs = [m for m in last.messages if m["role"] == "tool"]
+        self.assertIn("tool boom", tool_msgs[0]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()

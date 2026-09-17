@@ -70,7 +70,11 @@ class SubAgent:
                         args = {}
                 else:
                     args = raw or {}
-                result = self.tool_dispatch(name, args)
+                try:
+                    result = self.tool_dispatch(name, args)
+                except Exception as e:
+                    # 工具派发失败：把错误作为工具结果回传，不崩整个子代理
+                    result = f"<工具 {name} 执行失败: {type(e).__name__}: {e}>"
                 messages.append({"role": "assistant", "tool_calls": [tc]})
                 messages.append({"role": "tool", "tool_call_id": tc.get("id"),
                                  "name": name, "content": str(result)})
@@ -97,12 +101,16 @@ def parallel_delegate(router, tasks: List[Union[Tuple[str, str], Dict]],
     results: List[dict] = [{} for _ in tasks]
 
     def worker(i: int, task) -> Tuple[int, dict]:
-        if isinstance(task, dict):
-            g, c = task["goal"], task.get("context", "")
-        else:
-            g = task[0]
-            c = task[1] if len(task) > 1 else ""
-        return i, delegate_task(router, g, c, **kw)
+        try:
+            if isinstance(task, dict):
+                g, c = task["goal"], task.get("context", "")
+            else:
+                g = task[0]
+                c = task[1] if len(task) > 1 else ""
+            return i, delegate_task(router, g, c, **kw)
+        except Exception as e:
+            return i, {"summary": f"<子代理异常: {type(e).__name__}: {e}>",
+                       "steps": 0, "truncated": True, "error": str(e)}
 
     with ThreadPoolExecutor(max_workers=max_concurrent) as ex:
         futs = [ex.submit(worker, i, t) for i, t in enumerate(tasks)]

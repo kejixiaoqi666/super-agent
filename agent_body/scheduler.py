@@ -180,7 +180,12 @@ class CronScheduler:
             job["count"] += 1
             ran.append(job["id"])
             if runner:
-                runner(job)
+                try:
+                    runner(job)
+                    job["last_error"] = None
+                except Exception as e:
+                    # 单个任务失败不影响其余任务/常驻循环
+                    job["last_error"] = f"{type(e).__name__}: {e}"
         if ran:
             self._save()
         return ran

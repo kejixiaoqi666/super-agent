@@ -62,6 +62,26 @@ class WebExtractTest(unittest.TestCase):
             web_extract(base)
         srv.shutdown()
 
+    def test_oversized_page_raises(self):
+        # 超过下载上限 → WebError（防超大页吃内存）
+        class _BigPage(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = b"x" * 1024
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+        srv, base = _server(_BigPage)
+        old = web._MAX_BYTES
+        web._MAX_BYTES = 128
+        try:
+            with self.assertRaises(web.WebError):
+                web_extract(base)
+        finally:
+            web._MAX_BYTES = old
+            srv.shutdown()
+
 
 class SearchParseTest(unittest.TestCase):
     # 用含跳转链接的样例 HTML 测解析，避免网络依赖
