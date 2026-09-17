@@ -132,6 +132,16 @@ class SuperBrainAdapter(BrainPort):
     def recall(self, query, k=5):
         return self._brain.recall(query, k=k)
 
+    def record_experience(self, task, context="", outcome="", lesson=""):
+        return self._brain.record_experience(task, context=context,
+                                             outcome=outcome, lesson=lesson)
+
+    def distill_skill(self, name, procedure, success=True):
+        return self._brain.distill_skill(name, procedure, success=success)
+
+    def best_skills(self, k=5):
+        return self._brain.best_skills(k=k)
+
     def save(self):
         return self._brain.save()
 

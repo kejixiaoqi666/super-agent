@@ -80,6 +80,10 @@ class Body:
         # 生命周期钩子（pre/post tool 等事件）
         from .hooks import HookRegistry
         self.hooks = HookRegistry()
+        # 经验自动固化：任务成功→喂大脑→重复达阈值→写成SKILL.md
+        from .skill_compiler import SkillCompiler
+        self.compiler = SkillCompiler(self.skills, threshold=3,
+                                      persist_path=Path(data_dir) / "experience.json")
         # 会话全文检索：自动给每个对话记入 transcript.db，供 /search 检索
         self.transcript = None
         try:
@@ -458,7 +462,15 @@ class Body:
                 # 拷贝剩余字段，避免 c.pop 破坏调用方字典
                 extra = {k: v for k, v in c.items() if k not in ("claim", "kind")}
                 gate.add(claim, kind, **extra)
-        return self.loop.run(task.task_id, brain, verifier=gate)
+        result = self.loop.run(task.task_id, brain, verifier=gate)
+        # 成功 → 经验自动固化（喂大脑 → 重复达阈值写成SKILL.md）
+        if isinstance(result, dict) and result.get("status") == "done":
+            try:
+                self.compiler.on_task_success(
+                    brain, goal, outcome=str(result.get("steps_done", "")))
+            except Exception:
+                pass
+        return result
 
     def run_chain(self, goals, chain_id="chain", session="task"):
         """串行执行一串有依赖的任务(连贯任务队列)。

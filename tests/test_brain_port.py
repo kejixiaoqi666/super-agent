@@ -23,6 +23,9 @@ class FabricatedKernel(BrainPort):
     def chat(self, message, person_id=None): return f"[{self.tag}] {message}"
     def remember(self, content, scope="user", tier="recall", **kw): return "fake-id"
     def recall(self, query, k=5): return []
+    def record_experience(self, task, context="", outcome="", lesson=""): return {}
+    def distill_skill(self, name, procedure, success=True): return {}
+    def best_skills(self, k=5): return []
     def save(self): self._saved = "saved"; return "ok"
     def load(self): return True
     def close(self): pass

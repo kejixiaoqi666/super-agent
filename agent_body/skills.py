@@ -94,6 +94,28 @@ class SkillStore:
         self._by_name.clear()
         return self._scan()
 
+    # ---- 写入（身体自动固化的技能）----
+    def upsert(self, name: str, description: str = "", body: str = "",
+               version: str = "1.0.0", root=None) -> Skill:
+        """写入/更新一个 SKILL.md（供 SkillCompiler 自动固化）。返回 Skill。"""
+        name = name.strip()
+        if not name:
+            raise ValueError("技能名不能为空")
+        base = Path(root) if root else (self.roots[0] if self.roots
+                                        else Path("skills"))
+        target_dir = base / name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        path = target_dir / "SKILL.md"
+        text = (f"---\nname: {name}\ndescription: {description}\n"
+                f"version: {version}\n---\n\n{body}")
+        path.write_text(text, encoding="utf-8")
+        sk = Skill(name=name, path=path, description=description,
+                   version=version, body=body,
+                   frontmatter={"name": name, "description": description,
+                                "version": version})
+        self._by_name[name] = sk
+        return sk
+
     # ---- 查询 ----
     def names(self) -> List[str]:
         return sorted(self._by_name)
