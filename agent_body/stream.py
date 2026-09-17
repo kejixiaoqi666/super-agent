@@ -9,6 +9,9 @@ from __future__ import annotations
 import time
 from typing import Callable, Generator, List
 
+# Telegram sendMessage/editMessageText 文本上限（字符，超限返回 400 TEXT_TOO_LONG）
+TG_MAX_TEXT = 4096
+
 
 def chunk_text(text: str, size: int = 200) -> Generator[str, None, None]:
     """把长文本按 size 切成流式块（尊重边界，不切词中间）。"""
@@ -29,22 +32,40 @@ def chunk_text(text: str, size: int = 200) -> Generator[str, None, None]:
         i = j
 
 
+def split_for_telegram(text: str, limit: int = TG_MAX_TEXT) -> List[str]:
+    """按 Telegram 文本上限切成若干条（尽量在边界断句，不切断词）。"""
+    if len(text) <= limit:
+        return [text]
+    return list(chunk_text(text, limit))
+
+
 def stream_telegram(reply: str, send: Callable[[str], int],
                     edit: Callable[[int, str], None],
                     chunk: int = 200, delay: float = 0.0,
                     min_delta: int = 30) -> int:
-    """流式发送一条回复（TG 打字效果）。
+    """流式发送一条回复（TG 打字效果）。超长自动分片成多条消息。
 
     send(text)  -> 返回 message_id（用于 edit）。
     edit(mid, text)  -> 覆盖消息内容。
-    返回最终 message_id。delay 为块间暂停（秒）；min_delta 为触发 edit 的
-    最小累计增量（避免每 200 字符都发请求，攒够再刷）。
+    返回最后一条消息的 message_id。delay 为块间暂停（秒）；min_delta 为触发
+    edit 的最小累计增量（避免每 200 字符都发请求，攒够再刷）。
     """
+    last_mid = 0
+    # 超 4096 上限分片成多条，每条独立走打字流式
+    for part in split_for_telegram(reply):
+        last_mid = _stream_one(part, send, edit, chunk, delay, min_delta)
+    return last_mid
+
+
+def _stream_one(text: str, send: Callable[[str], int],
+                edit: Callable[[int, str], None],
+                chunk: int, delay: float, min_delta: int) -> int:
+    """流式发送单条（不超过 4096）消息，返回 message_id。"""
     message_id = send("…")
     buffer = ""
     last_edited = 0
     # 先缓存所有块，按 min_delta 攒批刷新
-    for piece in chunk_text(reply, chunk):
+    for piece in chunk_text(text, chunk):
         buffer += piece
         if len(buffer) - last_edited >= min_delta:
             edit(message_id, buffer)

@@ -168,8 +168,13 @@ class MCPServer:
 
     def __init__(self, tools: Optional[Dict[str, Callable]] = None,
                  server_info: Optional[dict] = None):
-        # tools: {name: callable(args_dict)->result}
+        # tools: {name: callable} 或 {name: (callable, inputSchema)}
+        #   后者可声明参数 schema，用于 tools/list 暴露 + tools/call 前校验。
         self.tools = tools or {}
+        self._schemas: Dict[str, dict] = {}
+        for name, spec in self.tools.items():
+            if isinstance(spec, tuple) and len(spec) == 2:
+                self.tools[name], self._schemas[name] = spec[0], spec[1]
         self.server_info = server_info or {"name": "super-agent-server",
                                            "version": "0.3.0"}
 
@@ -188,7 +193,7 @@ class MCPServer:
         if method == "tools/list":
             return _make_response(req_id, {
                 "tools": [{"name": n, "description": getattr(f, "__doc__", "") or "",
-                           "inputSchema": {"type": "object"}}
+                           "inputSchema": self._schemas.get(n, {"type": "object"})}
                           for n, f in self.tools.items()],
             })
         if method == "tools/call":
@@ -197,6 +202,15 @@ class MCPServer:
             if name not in self.tools:
                 return _make_response(
                     req_id, error={"code": -32602, "message": f"未知工具: {name}"})
+            # 参数校验：声明了 schema 的工具，调用前用 struct 校验参数
+            schema = self._schemas.get(name)
+            if schema is not None:
+                from ..struct import validate as _validate
+                ok, errs = _validate(arguments, schema)
+                if not ok:
+                    return _make_response(
+                        req_id, error={"code": -32602,
+                                       "message": "参数校验失败: " + "; ".join(errs)})
             try:
                 result = self.tools[name](arguments)
                 return _make_response(req_id, {"content": [{"type": "text",

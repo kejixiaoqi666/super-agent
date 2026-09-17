@@ -56,10 +56,11 @@ def serve(body):
             if sender not in allowed or chat.get("type") != "private" or not text:
                 continue
             try:
-                if len(text) > 16000:
-                    raise ValueError("message too long")
+                if not text:
+                    continue
                 reply = body.chat("telegram:" + str(chat["id"]), text, str(sender))["reply"]
-                # 流式输出：打字效果（先发空消息，再 editMessageText 逐步追加）
+                # 流式输出：打字效果（先发空消息，再 editMessageText 逐步追加；
+                # 超 4096 上限自动分片成多条消息）
                 from .stream import stream_telegram
                 stream_telegram(
                     reply,

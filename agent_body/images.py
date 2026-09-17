@@ -43,12 +43,18 @@ class ImageResult:
                 f"({self.ratio * 100:.0f}%) [{self.format}]")
 
 
+class ImageTooLargeError(ValueError):
+    """图片像素超上限，拒绝解压/入库（防解压炸弹吃内存）。"""
+
+
 class ImageStore:
     """图片统一存放 + 压缩入库。"""
 
-    def __init__(self, assets: AssetStore, compress_quality: int = 80):
+    def __init__(self, assets: AssetStore, compress_quality: int = 80,
+                 max_pixels: int = 40_000_000):
         self.assets = assets
         self.compress_quality = compress_quality  # 0-100，默认 80（ROADMAP 参数）
+        self.max_pixels = max_pixels  # 尺寸上限（像素），防解压炸弹 DoS
 
     def ingest(self, src: Union[str, Path, bytes], session: str = "default",
                target_format: str = "PNG") -> ImageResult:
@@ -77,7 +83,15 @@ class ImageStore:
         try:
             img = Image.open(path_or_bytes(src, raw))
             img = ImageOps.exif_transpose(img)  # 尊重 EXIF 方向
+            # 解压前显式检查尺寸：超上限立即拒绝，防解压炸弹吃内存
+            # （不依赖 Pillow 宽松默认 + 仅警告不抛错的地带）
+            if img.width * img.height > self.max_pixels:
+                raise ImageTooLargeError(
+                    f"图片 {img.width}x{img.height}={img.width * img.height} "
+                    f"像素，超过上限 {self.max_pixels}")
             img.load()
+        except ImageTooLargeError:
+            raise
         except Exception:
             # 打不开（非图）则原样落盘，不误伤
             target = out_dir / f"{base}{ext_of_src}"
