@@ -68,6 +68,46 @@ class Body:
                                        self.storage.assets_dir / "plugins"])
         self.tools = ["read_file", "write_file", "shell", "search_files",
                       "web_search", "web_extract", "memory"]
+        # 技能系统：发现工作区/资产区/数据目录的 skills/**/SKILL.md
+        from .skills import SkillStore
+        self.skills = SkillStore(Path(workspace) / "skills",
+                                 self.storage.assets_dir / "skills",
+                                 Path(data_dir) / "skills")
+
+    # ---- 技能（skills/**/SKILL.md）----
+    def scan_skills(self) -> list:
+        """发现并列出技能元数据。"""
+        return [{"name": s.name, "version": s.version,
+                 "description": s.description, "path": str(s.path)}
+                for s in self.skills.list()]
+
+    def skill_instructions(self, *names: str, include_body: bool = True) -> str:
+        """渲染选中的技能为可注入上下文的指令块；未知名字静默跳过。"""
+        return self.skills.instructions(*names, include_body=include_body)
+
+    # ---- 委派 / 子代理（delegation）----
+    def build_router(self):
+        """从环境构造模型路由：有 SA_PROVIDER_*（或 OPENAI_*）则用真实 provider，
+        否则回退离线 Echo（测试/无钥匙环境可用）。"""
+        import os
+        base = os.environ.get("SA_PROVIDER_BASE", os.environ.get("OPENAI_BASE_URL"))
+        key = os.environ.get("SA_PROVIDER_KEY", os.environ.get("OPENAI_API_KEY"))
+        model = os.environ.get("SA_PROVIDER_MODEL") or "default"
+        from memory_plane.model_router import (EchoProvider, FallbackRouter,
+                                               ModelRouter, OpenAIProvider,
+                                               ProviderConfig)
+        if base and key:
+            return FallbackRouter(
+                [OpenAIProvider(ProviderConfig("primary", base, key, model))],
+                routes={"default": "primary"})
+        return ModelRouter([EchoProvider()])
+
+    def delegate(self, goal: str, context: str = "", max_steps: int = 6,
+                 tool_dispatch=None) -> dict:
+        """委派一个子代理任务（用环境配置的 provider；无则 Echo 离线）。"""
+        from .delegation import delegate_task
+        return delegate_task(self.build_router(), goal, context,
+                             max_steps=max_steps, tool_dispatch=tool_dispatch)
 
     # ---- Phase 4/5 便捷入口（供 CLI/TUI/Bot 用）----
     def open_vault(self, master_password: str) -> Vault:

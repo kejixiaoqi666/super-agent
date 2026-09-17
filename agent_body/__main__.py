@@ -153,6 +153,22 @@ def main():
                           "/vault get <name> | /vault list | /vault rm <name>")
                 elif message.startswith("/vault "):
                     _vault_cmd(body, message[7:].strip(), args.vault_master)
+                elif message == "/skills":
+                    # 发现并列出技能（skills/**/SKILL.md）
+                    skills = body.scan_skills()
+                    if not skills:
+                        print("（无技能）")
+                    for s in skills:
+                        print(f"- {s['name']} v{s['version']} "
+                              f"{s['description']}")
+                elif message.startswith("/skills-load"):
+                    # /skills-load <name...> —— 渲染技能指令块注入上下文
+                    parts = message.split()[1:]
+                    if not parts:
+                        print("用法: /skills-load <技能名...>")
+                    else:
+                        txt = body.skill_instructions(*parts)
+                        print(txt if txt else "（这些技能不存在）")
                 else:
                     print(body.chat(args.session, message)["reply"])
     finally:
