@@ -4,7 +4,6 @@ This deliberately has no public bind, login, model, Telegram, or vault code.
 Those are separate adapters; a production gateway must authenticate before IPC.
 """
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from concurrent.futures import ThreadPoolExecutor
 import hmac
 import json
 import os

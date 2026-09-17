@@ -21,6 +21,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | P5 密码本 | 加密存储 / 主密码派生(不落盘) / 凭据分级 / 支付级防误伤 | `vault.py` |
 | 成熟补齐 | MCP 协议(客户端+服务器) / 结构化输出校验 / 流式输出(TG打字) / CI测试门禁 | `mcp/` `struct.py` `stream.py` `.github/workflows/test.yml` |
 | P1/P2 补齐 | 插件系统 / 可观测性(trace) / 断点续跑(/resume) / 重试预算 | `plugins/` `observe.py` `resume.py` `retry.py` |
+| 成熟补齐2 | **技能系统**(发现/加载/注入SKILL.md) / **真实Provider路由**(失败切换) / **子代理委派**(并行) / **会话FTS检索**(中文) / **Cron定时** / **网关鉴权**(白名单+哈希key) | `skills.py` `model_router.py` `delegation.py` `session_store.py` `scheduler.py` `auth.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 
@@ -33,6 +34,11 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 /resume [id]   断点续跑(全部或指定任务)
 /plugins    发现并列出插件
 /trace [id]  查看结构化执行轨迹
+/skills       列出已发现技能(skills/**/SKILL.md)
+/skills-load <名...>   渲染技能指令块注入上下文
+/cron-add <id> <规格(@every 30m|五段cron|@ISO)> [提示词]
+/cron-list    列出定时任务
+/cron-rm <id> 删除定时任务
 ```
 
 ---

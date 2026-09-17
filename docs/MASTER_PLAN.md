@@ -67,8 +67,14 @@
 | 可观测性（结构化 trace+统一日志） | agent_body/observe.py | ✅ |
 | 断点续跑（未完成清单+/resume） | agent_body/resume.py | ✅ |
 | 重试预算（attempts+wait 双上限） | agent_body/retry.py | ✅ |
+| 技能系统（skills/**/SKILL.md 发现/加载/注入） | agent_body/skills.py | ✅ 2026-09 |
+| 真实 Provider 路由（OpenAI兼容HTTP + 失败切换） | memory_plane/model_router.py | ✅ 2026-09 |
+| 子代理/委派（隔离有界 + 并行） | agent_body/delegation.py | ✅ 2026-09 |
+| 会话全文检索（FTS5 trigram 中文子串） | agent_body/session_store.py | ✅ 2026-09 |
+| 定时任务（@every/五段cron/一次性） | agent_body/scheduler.py | ✅ 2026-09 |
+| 网关鉴权（principal白名单 + 哈希API-key门禁） | agent_body/auth.py | ✅ 2026-09 |
 
-**总测试数：127 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：201 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 

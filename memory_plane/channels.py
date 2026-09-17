@@ -1,7 +1,7 @@
 """Channel contracts and deterministic local adapter for client/Bot tests."""
 from dataclasses import dataclass, field
 from queue import Queue, Empty
-import time, uuid
+import uuid
 
 
 @dataclass(frozen=True)

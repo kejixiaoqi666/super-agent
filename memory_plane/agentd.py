@@ -1,5 +1,5 @@
 """In-process control-plane kernel; executors are injected and never model-owned."""
-from .contracts import TaskStatus, Task, ToolCall, CapabilityLease
+from .contracts import TaskStatus, Task
 import time, uuid
 
 
