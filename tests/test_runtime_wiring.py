@@ -100,6 +100,16 @@ class RuntimeWiringTest(unittest.TestCase):
         finally:
             body.close()
 
+    def test_plan_wiring(self):
+        body = self._make_body()
+        try:
+            rep = body.plan("先A。再B", runner=lambda desc, i: f"做了{i}")
+            self.assertEqual(rep["done"], 2)
+            self.assertEqual(rep["progress"], "2/2")
+            self.assertEqual(len(rep["results"]), 2)
+        finally:
+            body.close()
+
 
 if __name__ == "__main__":
     unittest.main()

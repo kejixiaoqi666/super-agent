@@ -406,6 +406,16 @@ class Body:
             return str(G.is_repo(wd)).lower()
         raise ValueError(f"未知 git 操作: {op}")
 
+    # ---- Plan 模式（先规划后执行）----
+    def plan(self, goal: str, runner=None, decompose=None) -> dict:
+        """把 goal 拆成步骤并逐步执行。runner 缺省用 delegate 逐步骤执行，返回执行报告。"""
+        from .planner import execute_plan, make_plan
+        if runner is None:
+            def runner(desc, i):
+                r = self.delegate(desc)
+                return r.get("summary") or "(空)"
+        return execute_plan(make_plan(goal, decompose), runner)
+
     def _web_search(self, args: dict) -> str:
         from .web import web_search, WebError
         q = str(args.get("query", "")).strip()

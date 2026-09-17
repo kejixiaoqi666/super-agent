@@ -177,6 +177,17 @@ def main():
                             print(body._git(op, *parts[1:]))
                         except Exception as e:
                             print(f"git {op} 失败: {e}")
+                elif message.startswith("/plan"):
+                    # /plan <目标> —— 先拆步骤再逐步执行
+                    goal = message[5:].strip()
+                    if not goal:
+                        print("用法: /plan <目标>")
+                    else:
+                        print("规划中…")
+                        rep = body.plan(goal)
+                        print(f"进度: {rep['progress']} 失败:{rep['failed']}")
+                        for r in rep["results"]:
+                            print(f"  [{r['status']}] {r['desc']}")
                 elif message == "/skills":
                     # 发现并列出技能（skills/**/SKILL.md）
                     skills = body.scan_skills()
