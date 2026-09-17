@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -127,8 +128,103 @@ def rule_inspect_artifact(ctx: dict) -> Optional[Suggestion]:
     )
 
 
-DEFAULT_RULES: List[Rule] = [rule_pending_resume, rule_git_dirty,
-                             rule_run_tests, rule_inspect_artifact]
+DEFAULT_RULES: List[Rule] = []
+#（DEFAULT_RULES 在模块末尾组装，因 rule_learned_habit 依赖下方定义）
+
+
+class HabitLearner:
+    """习惯学习 —— 记录"这类任务做完后用户通常做什么"。
+
+    让预动性从固定模板升级为**数据驱动**：根据用户真实的后置动作，
+    预测下一次该预准备好什么。count 越高 → 建议置信度越高。
+    持久化到 data_dir/proactive/habits.json（原子写+0600）。
+    """
+
+    def __init__(self, data_dir: Optional[Path] = None,
+                 min_evidence: int = 2) -> None:
+        self.data_dir = Path(data_dir) if data_dir else None
+        self.min_evidence = max(1, min_evidence)
+        # context_type -> {command: count}
+        self._counts: Dict[str, Dict[str, int]] = {}
+        self._load()
+
+    def _path(self) -> Optional[Path]:
+        if not self.data_dir:
+            return None
+        p = self.data_dir / "proactive" / "habits.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _load(self) -> None:
+        p = self._path()
+        if p and p.exists():
+            try:
+                self._counts = json.loads(p.read_text("utf-8"))
+            except Exception:
+                self._counts = {}
+
+    def _save(self) -> None:
+        p = self._path()
+        if p:
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self._counts, ensure_ascii=False), "utf-8")
+            try:
+                tmp.chmod(0o600)
+            except OSError:
+                pass
+            tmp.replace(p)
+
+    def record(self, context_type: str, command: str, weight: int = 1) -> None:
+        """记录一次"该类型任务完成后执行了 command"的观察。"""
+        if not context_type or not command:
+            return
+        cmd = command.strip()
+        if not cmd:
+            return
+        c = self._counts.setdefault(context_type, {})
+        c[cmd] = c.get(cmd, 0) + max(1, weight)
+        self._save()
+
+    def bump(self, context_type: str, command: str) -> None:
+        """正向信号：这条习惯建议被用户采纳，等价于再观察一次。"""
+        self.record(context_type, command, weight=1)
+
+    def top_for(self, context_type: str, k: int = 1) -> List[tuple]:
+        """该类型下最常用的后置命令（按次数降序）。空=无足够证据。"""
+        c = self._counts.get(context_type, {})
+        ranked = sorted(c.items(), key=lambda kv: kv[1], reverse=True)
+        return [(cmd, n) for cmd, n in ranked
+                if n >= self.min_evidence][:k]
+
+    def total(self) -> int:
+        return sum(len(v) for v in self._counts.values())
+
+
+def _type_key(goal: str) -> str:
+    """任务目标 → 稳定类型键（与 skill_compiler 同款归一化）。"""
+    s = re.sub(r"[^\w\u4e00-\u9fff]+", "", str(goal or ""))
+    return s[:40] or "task"
+
+
+def rule_learned_habit(ctx: dict) -> Optional[Suggestion]:
+    """数据驱动规则：用户以前做完这类任务后常用的后置命令 → 预准备好。"""
+    learner = ctx.get("habits")
+    if not isinstance(learner, HabitLearner):
+        return None
+    goal = str((ctx.get("last_task") or {}).get("goal") or "")
+    tk = _type_key(goal)
+    top = learner.top_for(tk)
+    if not top:
+        return None
+    command, count = top[0]
+    return Suggestion(
+        title=f"按你以往习惯的下一步: {command}",
+        command=command,
+        confidence=min(0.9, 0.5 + 0.05 * count),
+        reason=f"你完成这类任务后的习惯是接着做这个（已出现 {count} 次）",
+        source=f"habit:{tk}:{command}",
+        ready=["来自你的历史习惯统计", f"出现 {count} 次"],
+    )
 
 
 class ProactiveEngine:
@@ -141,15 +237,22 @@ class ProactiveEngine:
                  rules: Optional[List[Rule]] = None,
                  min_confidence: float = 0.5,
                  cooldown_minutes: float = 30,
-                 max_items: int = 3) -> None:
+                 max_items: int = 3,
+                 habits: Optional[HabitLearner] = None) -> None:
         self.workspace = Path(workspace)
         self.data_dir = Path(data_dir) if data_dir else None
         self.rules = rules or list(DEFAULT_RULES)
         self.min_confidence = min_confidence
         self.cooldown_sec = cooldown_minutes * 60
         self.max_items = max_items
+        self.habits = habits or HabitLearner(data_dir)
         self._seen: Dict[str, float] = {}
         self._load()
+
+    # ---- 习惯学习（用户可显式喂，供数据驱动规则用）----
+    def record_habit(self, goal: str, command: str) -> None:
+        """记录一次后置习惯：'做完goal这类任务 → 用command'。"""
+        self.habits.record(_type_key(goal), command)
 
     # ---- watermark（防骚扰）----
     def _seen_path(self) -> Optional[Path]:
@@ -185,6 +288,7 @@ class ProactiveEngine:
         """返回按置信度排序的预动性建议（已去重+门槛+上限）。"""
         ctx = dict(context or {})
         ctx.setdefault("workspace", str(self.workspace))
+        ctx.setdefault("habits", self.habits)
         now = time.time()
         out: List[Suggestion] = []
         for rule in self.rules:
@@ -207,6 +311,7 @@ class ProactiveEngine:
         """只预测不标记（不改 watermark），用于预览/测试。"""
         ctx = dict(context or {})
         ctx.setdefault("workspace", str(self.workspace))
+        ctx.setdefault("habits", self.habits)
         out = []
         for rule in self.rules:
             try:
@@ -217,3 +322,9 @@ class ProactiveEngine:
                 out.append(s)
         out.sort(key=lambda s: s.confidence, reverse=True)
         return out[: self.max_items]
+
+
+# 默认规则集（须在全部规则定义后组装）
+DEFAULT_RULES[:] = [rule_pending_resume, rule_git_dirty,
+                    rule_run_tests, rule_inspect_artifact,
+                    rule_learned_habit]

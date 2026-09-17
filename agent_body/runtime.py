@@ -97,6 +97,7 @@ class Body:
         from .proactive import ProactiveEngine
         self.proactive = ProactiveEngine(Path(workspace), data_dir=Path(data_dir))
         self._next_hint: Optional[dict] = None   # 最近一次任务完成时的高置信建议
+        self.last_goal: str = ""                 # 最近一次任务目标(供 /learn 归类)
 
     # ---- 会话全文检索 ----
     def search_sessions(self, query: str, k: int = 10) -> list:
@@ -481,6 +482,7 @@ class Body:
         注意：不修改调用方传入的 verify_claims（内部拷贝）。
         """
         brain = self.brain(session)
+        self.last_goal = goal
         task = self.loop.submit(goal, owner=owner)
         gate = None
         if verify_claims:
@@ -530,6 +532,20 @@ class Body:
             return [s.to_dict() for s in self.proactive.suggest(c)]
         except Exception:
             return []
+
+    def learn_habit(self, goal: str, command: str) -> dict:
+        """记录一次后置习惯：'做完 goal 这类任务 → 用 command'。
+
+        预动性据此在下次同类任务完成后，提前预检并推荐 command。
+        """
+        try:
+            from .proactive import _type_key as _proactive_type
+            self.proactive.record_habit(goal, command)
+            n = self.proactive.habits.total()
+            return {"recorded": True, "goal_type": _proactive_type(goal),
+                    "command": command, "total_habits": n}
+        except Exception as e:
+            return {"recorded": False, "error": str(e)}
 
     def run_chain(self, goals, chain_id="chain", session="task"):
         """串行执行一串有依赖的任务(连贯任务队列)。

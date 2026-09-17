@@ -23,7 +23,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | P1/P2 补齐 | 插件系统 / 可观测性(trace) / 断点续跑(/resume) / 重试预算 | `plugins/` `observe.py` `resume.py` `retry.py` |
 | 成熟补齐2 | **技能系统**(发现/加载/注入SKILL.md) / **真实Provider路由**(失败切换) / **子代理委派**(并行) / **会话FTS检索**(中文) / **Cron定时** / **网关鉴权**(白名单+哈希key) | `skills.py` `model_router.py` `delegation.py` `session_store.py` `scheduler.py` `auth.py` |
 | 成熟补齐3 | **Web搜索/抓取工具**(真实) / **模型无关视觉**(感知哈希/状态色) / **多模态图像输入**(base64识图) / **Git集成** / **生命周期钩子** / **Plan模式** | `web.py` `vision.py` `git.py` `hooks.py` `planner.py` |
-| 成熟补齐4 | **经验自动固化**(重复成功→SKILL.md) / **跨会话自我重建**(/new不失忆) / **预动性**(主动预测并预检用户下一步, /next) | `skill_compiler.py` `handover.py` `proactive.py` |
+| 成熟补齐4 | **经验自动固化**(重复成功→SKILL.md) / **跨会话自我重建**(/new不失忆) / **预动性**(主动预测并预检用户下一步, /next + 数据驱动习惯学习 /learn) | `skill_compiler.py` `handover.py` `proactive.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 
@@ -43,6 +43,8 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 /cron-rm <id> 删除定时任务
 /cron-run     立即执行所有到期任务(默认跑 payload.prompt 经大脑)
 /search <关键词>   会话全文检索(对话自动记入 transcript.db)
+/next       预动性建议(任务完成后主动预测并预检用户下一步)
+/learn <命令>   记住习惯:"做完这类任务→用此命令"(数据驱动预动性)
 /delegate <目标>   委派一个子代理任务
 /看图 <图路径> [提示词]   模型识图(base64直传)
 /git <op> [args]    git status/diff/diffstat/commit/log/push/branch

@@ -75,9 +75,9 @@
 | 网关鉴权（principal白名单 + 哈希API-key门禁） | agent_body/auth.py | ✅ 2026-09 |
 | 经验自动固化（任务成功N次→自动生成SKILL.md） | agent_body/skill_compiler.py | ✅ 2026-09 |
 | 跨会话自我重建（/new后新会话首轮自动恢复上下文） | agent_body/handover.py | ✅ 2026-09 |
-| **预动性**（任务完成后主动预测+只读预检用户下一步, /next） | agent_body/proactive.py | ✅ 2026-09 |
+| **预动性**（任务完成后主动预测+只读预检用户下一步, /next + 数据驱动习惯学习 /learn） | agent_body/proactive.py | ✅ 2026-09 |
 
-**总测试数：286 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：293 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 

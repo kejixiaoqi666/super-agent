@@ -14,6 +14,7 @@ from pathlib import Path
 
 from agent_body.proactive import (
     ProactiveEngine, rule_pending_resume, rule_run_tests, Suggestion,
+    HabitLearner, rule_learned_habit, _type_key,
 )
 
 
@@ -115,6 +116,57 @@ class ProactiveEngineTest(unittest.TestCase):
         d = s.to_dict()
         self.assertEqual(d["title"], "t")
         self.assertEqual(d["confidence"], 0.7)
+
+
+class HabitLearnerTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.learner = HabitLearner(self.tmp / "data", min_evidence=2)
+
+    def test_record_and_top_for_threshold(self):
+        # 只出现 1 次 → 未达 min_evidence，不返回
+        self.learner.record("部署节点", "pytest")
+        self.assertEqual(self.learner.top_for("部署节点"), [])
+        # 第 2 次 → 达标
+        self.learner.record("部署节点", "pytest")
+        top = self.learner.top_for("部署节点")
+        self.assertEqual(top, [("pytest", 2)])
+
+    def test_persists_across_reload(self):
+        self.learner.record("部署节点", "pytest")
+        self.learner.record("部署节点", "pytest")
+        reloaded = HabitLearner(self.tmp / "data", min_evidence=2)
+        self.assertEqual(reloaded.top_for("部署节点"), [("pytest", 2)])
+
+    def test_bump_increments(self):
+        self.learner.record("写文档", "git commit")
+        self.learner.bump("写文档", "git commit")
+        self.assertEqual(self.learner.top_for("写文档"), [("git commit", 2)])
+
+    def test_ignores_blank(self):
+        self.learner.record("", "pytest")
+        self.learner.record("部署节点", "   ")
+        self.assertEqual(self.learner.total(), 0)
+
+    def test_learned_habit_rule(self):
+        self.learner.record("重启服务成功", "systemctl status")
+        self.learner.record("重启服务成功", "systemctl status")
+        s = rule_learned_habit({"habits": self.learner,
+                                "last_task": {"goal": "重启服务成功"}})
+        self.assertIsNotNone(s)
+        self.assertEqual(s.command, "systemctl status")
+        self.assertIn("习惯", s.reason)
+
+    def test_engine_surfaces_learned_habit(self):
+        eng = ProactiveEngine(self.tmp / "ws", data_dir=self.tmp / "data",
+                              habits=self.learner)
+        eng.record_habit("重启服务成功", "systemctl status")
+        eng.record_habit("重启服务成功", "systemctl status")
+        s = eng.suggest({"last_task": {"goal": "重启服务成功"}})
+        self.assertTrue(any("habit:" in x.source for x in s))
+
+    def test_type_key_normalizes(self):
+        self.assertEqual(_type_key("部署 节点!!服务"), _type_key("部署节点服务"))
 
 
 if __name__ == "__main__":

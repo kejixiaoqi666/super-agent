@@ -53,6 +53,11 @@ def _vault_cmd(body, arg: str, master_password: str = ""):
         print(f"未知子命令: {cmd}")
 
 
+def _last_goal(body) -> str:
+    """最近一次任务目标；无则用通用键。供 /learn 归类习惯。"""
+    return getattr(body, "last_goal", "") or "日常任务"
+
+
 def main():
     parser = argparse.ArgumentParser(description="AgentWorkbench body with SuperBrain 2.0")
     parser.add_argument("--version", action="version",
@@ -199,6 +204,18 @@ def main():
                         print(f"     {s['reason']}")
                         if s.get("ready"):
                             print(f"     已预检: {'; '.join(s['ready'])}")
+                elif message.startswith("/learn"):
+                    # /learn <后置命令> —— 记住"做完当前这类任务→用该命令"的习惯
+                    cmd = message[6:].strip()
+                    if not cmd:
+                        print("用法: /learn <后置命令>（记录：做完这类任务后用此命令）")
+                    else:
+                        r = body.learn_habit(_last_goal(body), cmd)
+                        if r.get("recorded"):
+                            print(f"✅ 已记录习惯: 这类任务→ {cmd} "
+                                  f"(当前共 {r['total_habits']} 条)")
+                        else:
+                            print(f"记录失败: {r.get('error')}")
                 elif message.startswith("/handoff"):
                     # /handoff [补充说明] —— 会话结束前存档，供下次自动恢复
                     summary = message[8:].strip()
