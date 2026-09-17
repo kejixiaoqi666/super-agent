@@ -188,6 +188,17 @@ def main():
                         print(f"进度: {rep['progress']} 失败:{rep['failed']}")
                         for r in rep["results"]:
                             print(f"  [{r['status']}] {r['desc']}")
+                elif message == "/next":
+                    # /next —— 预动性建议：主动预测并预检用户下一步
+                    nxt = body.next_actions()
+                    if not nxt:
+                        print("（暂无高置信的下一步建议）")
+                    for s in nxt:
+                        print(f"• {s['title']}  [置信 {s['confidence']}]")
+                        print(f"     建议命令: {s['command']}")
+                        print(f"     {s['reason']}")
+                        if s.get("ready"):
+                            print(f"     已预检: {'; '.join(s['ready'])}")
                 elif message.startswith("/handoff"):
                     # /handoff [补充说明] —— 会话结束前存档，供下次自动恢复
                     summary = message[8:].strip()

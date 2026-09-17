@@ -93,6 +93,10 @@ class Body:
             self.transcript = SessionStore(Path(data_dir) / "transcript.db")
         except Exception:
             self.transcript = None           # 无 FTS5 时优雅降级
+        # 预动性：任务完成后主动预测并预检用户下一步（确定性规则+只读预检）
+        from .proactive import ProactiveEngine
+        self.proactive = ProactiveEngine(Path(workspace), data_dir=Path(data_dir))
+        self._next_hint: Optional[dict] = None   # 最近一次任务完成时的高置信建议
 
     # ---- 会话全文检索 ----
     def search_sessions(self, query: str, k: int = 10) -> list:
@@ -494,7 +498,38 @@ class Body:
                     brain, goal, outcome=str(result.get("steps_done", "")))
             except Exception:
                 pass
+            # 预动性：任务成功 → 预测并预检用户下一步，附到结果里
+            try:
+                self._refresh_next({"goal": goal, "status": "done",
+                                    "result": result.get("steps_done", "")})
+                if self._next_hint:
+                    result = dict(result)
+                    result["next"] = self._next_hint
+            except Exception:
+                pass
         return result
+
+    # ---- 预动性 ----
+    def _refresh_next(self, context: dict) -> None:
+        """刷新高置信"下一步"建议（不刷 watermark 的 peek + 只留最高置信）。"""
+        c = dict(context)
+        c["workspace"] = str(self.workspace)
+        c["pending_count"] = self.queue.pending_count()
+        try:
+            self._next_hint = self.proactive.peek(c)[0].to_dict() \
+                if self.proactive.peek(c) else None
+        except Exception:
+            self._next_hint = None
+
+    def next_actions(self, **context) -> list:
+        """返回预动性建议（触发 watermark 去重，供 /next 展示）。"""
+        c = dict(context)
+        c["workspace"] = str(self.workspace)
+        c["pending_count"] = self.queue.pending_count()
+        try:
+            return [s.to_dict() for s in self.proactive.suggest(c)]
+        except Exception:
+            return []
 
     def run_chain(self, goals, chain_id="chain", session="task"):
         """串行执行一串有依赖的任务(连贯任务队列)。
