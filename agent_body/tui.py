@@ -45,6 +45,21 @@ def _chat(body, console):
         if msg.strip() == "/tick":
             console.print(json.dumps(body.tick("tui"), ensure_ascii=False, default=str))
             continue
+        if msg.strip().startswith("/看图"):
+            # /看图 <图路径> [提示词...] —— 模型识图
+            parts = msg.strip()[3:].split(maxsplit=1)
+            if not parts:
+                console.print("[yellow]用法: /看图 <图路径> [提示词][/yellow]")
+                continue
+            path = parts[0]
+            prompt = parts[1] if len(parts) > 1 else "看看这张图"
+            try:
+                r = body.chat_image("tui", path, prompt)
+                console.print(Panel(r["reply"], title="🖼️ 模型识图",
+                                    border_style="magenta", box=box.ROUNDED))
+            except Exception as e:
+                console.print(f"[red]看图失败: {e}[/red]")
+            continue
         r = body.chat("tui", msg)
         console.print(Panel(r["reply"], title=f"[dim]{r['elapsed_seconds']}s[/dim]",
                              border_style="green", box=box.ROUNDED))

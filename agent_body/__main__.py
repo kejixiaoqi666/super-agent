@@ -148,6 +148,19 @@ def main():
                     session = parts[1] if len(parts) > 1 else "default"
                     res = body.images.ingest(src, session=session)
                     print(res.summary())
+                elif message.startswith("/看图"):
+                    # /看图 <图路径> [提示词...] —— 模型识图(base64直传)
+                    parts = message[3:].strip().split(maxsplit=1)
+                    if not parts:
+                        print("用法: /看图 <图路径> [提示词]")
+                    else:
+                        path = parts[0]
+                        prompt = parts[1] if len(parts) > 1 else "看看这张图"
+                        try:
+                            r = body.chat_image(args.session, path, prompt)
+                            print(r["reply"])
+                        except Exception as e:
+                            print(f"看图失败: {e}")
                 elif message == "/vault":
                     print("密码本命令: /vault set <name> <value> [tier] | "
                           "/vault get <name> | /vault list | /vault rm <name>")
