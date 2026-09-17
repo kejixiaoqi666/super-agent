@@ -32,9 +32,10 @@ _TRANSITIONS: Dict[TaskStatus, set] = {
                             TaskStatus.FAILED, TaskStatus.CANCELED},
     TaskStatus.VERIFYING: {TaskStatus.DONE, TaskStatus.EXECUTING, TaskStatus.FAILED,
                            TaskStatus.CANCELED},
+    # 失败/取消后可续跑：允许拉回 EXECUTING（断点续跑）
     TaskStatus.DONE: set(),
-    TaskStatus.FAILED: set(),
-    TaskStatus.CANCELED: set(),
+    TaskStatus.FAILED: {TaskStatus.EXECUTING},
+    TaskStatus.CANCELED: {TaskStatus.EXECUTING},
 }
 
 

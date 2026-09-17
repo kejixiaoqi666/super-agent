@@ -95,6 +95,43 @@ def main():
                 elif message.startswith("/task-cancel "):
                     print(json.dumps(body.task_cancel(message[13:].strip()),
                                      ensure_ascii=False, default=str))
+                elif message == "/pending":
+                    # 未完成清单（FAILED/CANCELED 可续跑）
+                    pending = body.pending_tasks()
+                    if not pending:
+                        print("（无未完成任务）")
+                    for p in pending:
+                        print(f"- {p['task_id']} [{p['status']}] {p['goal']} "
+                              f"(step {p['next_step']}/{p['plan_len']})")
+                elif message.startswith("/resume"):
+                    # /resume            → 续跑全部
+                    # /resume <task_id>  → 续跑指定
+                    parts = message.split()
+                    tid = parts[1] if len(parts) > 1 else None
+                    print(json.dumps(body.resume_tasks(tid, args.session),
+                                     ensure_ascii=False, default=str))
+                elif message == "/plugins":
+                    # 发现并列出插件
+                    plugins = body.scan_plugins()
+                    if not plugins:
+                        print("（无插件）")
+                    for p in plugins:
+                        print(f"- {p.id} v{p.version} caps={p.capabilities}")
+                elif message.startswith("/plugins-enable "):
+                    cap = message[len("/plugins-enable "):].strip()
+                    res = body.enable_capability(cap)
+                    print(f"启用 {len(res)} 个插件: {[r['id'] for r in res]}")
+                elif message.startswith("/trace"):
+                    # /trace           → 最近一次 trace
+                    # /trace <trace_id> → 指定 trace
+                    parts = message.split()
+                    tid = parts[1] if len(parts) > 1 else body.tracer.trace_id()
+                    events = body.tracer.read_trace(tid)
+                    print(f"trace {tid}: {len(events)} 条")
+                    for e in events:
+                        print(f"  {e.get('ts', '')} {e.get('event')} "
+                              f"{e.get('name', '')} "
+                              f"{e.get('error', '')}{e.get('elapsed_ms', '')}")
                 elif message == "/storage":
                     # 存储占用 + 回收过期资产
                     print(json.dumps(body.storage_report(), ensure_ascii=False, default=str))

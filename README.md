@@ -20,6 +20,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | P4 资产与存储 | 五区存储布局 / 资产分类挂载 / 图片统一存放+PNG压缩入库 / 保留时长回收 | `storage.py` `assets.py` `images.py` |
 | P5 密码本 | 加密存储 / 主密码派生(不落盘) / 凭据分级 / 支付级防误伤 | `vault.py` |
 | 成熟补齐 | MCP 协议(客户端+服务器) / 结构化输出校验 / 流式输出(TG打字) / CI测试门禁 | `mcp/` `struct.py` `stream.py` `.github/workflows/test.yml` |
+| P1/P2 补齐 | 插件系统 / 可观测性(trace) / 断点续跑(/resume) / 重试预算 | `plugins/` `observe.py` `resume.py` `retry.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 
@@ -28,6 +29,10 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 /gc         回收超保留时长的过期资产(资产区+缓存区)
 /image <路径> [session]   图片压缩入库(默认转PNG)
 /vault      密码本操作(需 --vault-master 启动)
+/pending    未完成清单(FAILED/CANCELED 可续跑任务)
+/resume [id]   断点续跑(全部或指定任务)
+/plugins    发现并列出插件
+/trace [id]  查看结构化执行轨迹
 ```
 
 ---

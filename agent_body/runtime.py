@@ -17,6 +17,8 @@ from .images import ImageStore
 from .vault import Vault
 from .struct import ensure as _ensure_schema
 from .mcp import MCPClient as _MCPClient
+from .observe import Tracer, get_logger
+from .plugins import PluginRegistry
 
 
 class BodyPolicy:
@@ -55,6 +57,12 @@ class Body:
         self.assets = AssetStore(self.storage)
         self.images = ImageStore(self.assets)
         self.vault_path = self.storage.config("vault.json")  # 密码本落点
+        # 可观测性：结构化 trace
+        self.tracer = Tracer(data_dir)
+        self.logger = get_logger("super-agent", data_dir)
+        # 插件系统：从 data_dir/plugins + 资产区 plugins 发现
+        self.plugins = PluginRegistry([Path(data_dir) / "plugins",
+                                       self.storage.assets_dir / "plugins"])
         self.tools = ["read_file", "write_file", "shell", "search_files",
                       "web_search", "web_extract", "memory"]
 
@@ -75,6 +83,29 @@ class Body:
         client = _MCPClient(command, args or [], cwd=cwd, name=name)
         client.connect()
         return client
+
+    # ---- 断点续跑 / 插件 / 观测 ----
+    def pending_tasks(self) -> list:
+        """未完成清单（FAILED/CANCELED 可续跑任务）。"""
+        from .resume import resume_list
+        return resume_list(self.loop)
+
+    def resume_tasks(self, task_id: Optional[str] = None,
+                     session: str = "local") -> list:
+        """续跑全部（或指定）未完成任务。返回各任务最终摘要。"""
+        from .resume import resume_one, resume_all
+        brain = self.brain(session)
+        if task_id:
+            return [resume_one(self.loop, task_id, brain)]
+        return resume_all(self.loop, brain)
+
+    def scan_plugins(self) -> list:
+        """发现并返回插件清单（不启用）。"""
+        return self.plugins.scan()
+
+    def enable_capability(self, cap: str) -> list:
+        """启用所有声明了某能力的插件，返回启用的清单。"""
+        return [p.summary() for p in self.plugins.enable_capability(cap)]
 
     def _path(self, path):
         target = (self.workspace / path).resolve()
@@ -159,10 +190,12 @@ class Body:
         brain = self.brain(session)
         started = time.monotonic()
         # 项目感知精挑：只喂相关记忆/工具线索，不塞废话
-        curated = self.curator.curate(brain, self.project, message, self.tools)
-        prompt = curated.to_prompt()
-        reply = brain.chat(prompt, person_id=person_id or session)
-        brain.save()
+        with self.tracer.span("curate", session=session):
+            curated = self.curator.curate(brain, self.project, message, self.tools)
+            prompt = curated.to_prompt()
+        with self.tracer.span("chat", session=session):
+            reply = brain.chat(prompt, person_id=person_id or session)
+            brain.save()
         # token 计费 + 上下文统计 + 预算记账
         try:
             pt = estimate_tokens(prompt)

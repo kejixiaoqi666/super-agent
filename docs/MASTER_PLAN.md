@@ -63,8 +63,12 @@
 | MCP 协议（客户端+服务器，stdio） | agent_body/mcp/ | ✅ |
 | 结构化输出（JSON Schema 校验） | agent_body/struct.py | ✅ |
 | 流式输出（TG 打字效果+生成器） | agent_body/stream.py | ✅ |
+| 插件系统（发现/加载/生命周期） | agent_body/plugins/ | ✅ |
+| 可观测性（结构化 trace+统一日志） | agent_body/observe.py | ✅ |
+| 断点续跑（未完成清单+/resume） | agent_body/resume.py | ✅ |
+| 重试预算（attempts+wait 双上限） | agent_body/retry.py | ✅ |
 
-**总测试数：109 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：127 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 

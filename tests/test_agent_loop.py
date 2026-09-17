@@ -50,8 +50,13 @@ class TaskStateMachineTest(unittest.TestCase):
     def test_terminal_states_lock(self):
         t = TaskState("目标")
         t.transition(TaskStatus.FAILED)
+        # FAILED 现在允许断点续跑：可拉回 EXECUTING（不再视为锁死终态）
+        self.assertTrue(t.can(TaskStatus.EXECUTING))
+        t2 = TaskState("目标")
+        t2.transition(TaskStatus.EXECUTING)
+        t2.transition(TaskStatus.DONE)
         with self.assertRaises(ValueError):
-            t.transition(TaskStatus.EXECUTING)  # FAILED 是终态
+            t2.transition(TaskStatus.EXECUTING)  # DONE 仍是真正终态
 
     def test_resume_cursor_skips_done(self):
         t = TaskState("目标", plan=["a", "b", "c"])

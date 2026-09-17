@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..safety import call_with_retry
+from ..retry import RetryBudget, RetryBudgetExhausted
 
 # 危险命令模式（触发需批准 / 拦截）
 DANGEROUS_PATTERNS: List[str] = [
@@ -57,11 +58,13 @@ class Sandbox:
 
     def run(self, cmd: str, task_id: str = "adhoc", timeout: float = 60.0,
             keep: bool = False, retries: int = 0,
-            retryable_errors: tuple = ()) -> dict:
+            retryable_errors: tuple = (),
+            budget: Optional[RetryBudget] = None) -> dict:
         """在隔离沙箱目录执行命令。
 
         keep=True 时保留工作目录与产物（供取走），否则结束自动回收。
-        返回 {ok, code, output, workdir, cleaned, elapsed}.
+        retries/budget：统一重试；传 RetryBudget 时用预算上限（attempts+wait）
+        返回 {ok, code, output, workdir, cleaned, elapsed, attempts}.
         """
         danger = _is_dangerous(cmd)
         if danger and self.require_approval:
@@ -79,7 +82,13 @@ class Sandbox:
             return r
 
         try:
-            if retries > 0:
+            if budget is not None:
+                # 统一重试预算：attempts+wait 双上限
+                try:
+                    r = budget.call(go)
+                except RetryBudgetExhausted as exc:
+                    raise CommandError(cmd, -2, f"重试预算耗尽: {exc}") from exc
+            elif retries > 0:
                 result, _ = call_with_retry(
                     go, max_retries=retries,
                     retryable=lambda e: isinstance(e, CommandError)
@@ -93,6 +102,7 @@ class Sandbox:
                 "output": (r.stdout or "")[:4000],
                 "workdir": str(workdir), "cleaned": cleaned_now,
                 "elapsed": round(time.time() - start, 3),
+                "attempts": budget.attempts if budget is not None else 1,
             }
         finally:
             if not keep:
