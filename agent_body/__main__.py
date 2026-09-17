@@ -166,6 +166,17 @@ def main():
                           "/vault get <name> | /vault list | /vault rm <name>")
                 elif message.startswith("/vault "):
                     _vault_cmd(body, message[7:].strip(), args.vault_master)
+                elif message.startswith("/git"):
+                    # /git status|diff|diffstat|commit <msg>|log|push|branch|isrepo
+                    parts = message[4:].strip().split()
+                    if not parts:
+                        print("用法: /git status|diff|diffstat|commit <信息>|log [n]|push|branch")
+                    else:
+                        op = parts[0]
+                        try:
+                            print(body._git(op, *parts[1:]))
+                        except Exception as e:
+                            print(f"git {op} 失败: {e}")
                 elif message == "/skills":
                     # 发现并列出技能（skills/**/SKILL.md）
                     skills = body.scan_skills()

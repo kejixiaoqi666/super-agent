@@ -271,6 +271,11 @@ class Body:
                           {"url": {"type": "string"},
                            "max_chars": {"type": "integer"}},
                           self._web_extract, "read"),
+                BrainTool("git", "Git ops: status/diff/commit/log/push/branch",
+                          {"op": {"type": "string"},
+                           "args": {"type": "array"}},
+                          lambda a: self._git(a.get("op", ""), *a.get("args", [])),
+                          "exec"),
             ]
             try:
                 port.attach_tools(tools)
@@ -366,6 +371,33 @@ class Body:
         return result
 
     # ---- Web 工具（真实可用，供大脑调用）----
+    def _git(self, op: str, *args) -> str:
+        """git 操作封装（作用于工作区）。op: status/diff/diffstat/commit/log/push/branch/isrepo。"""
+        import agent_body.git as G
+        wd = self.workspace
+        if op == "status":
+            return "\n".join(G.status(wd)) or "(无改动)"
+        if op == "diff":
+            staged = bool(args and args[0] == "--cached")
+            return G.diff(wd, staged=staged) or "(无差异)"
+        if op == "diffstat":
+            import json
+            return json.dumps(G.diff_stat(wd), ensure_ascii=False)
+        if op == "commit":
+            if not args:
+                return "commit 需要提交信息"
+            return G.commit(wd, args[0])
+        if op == "log":
+            n = int(args[0]) if args and str(args[0]).isdigit() else 10
+            return "\n".join(f"{h} {s}" for h, s in G.log(wd, n))
+        if op == "push":
+            return G.push(wd, args[0] if args else None) or "已推送"
+        if op == "branch":
+            return G.current_branch(wd)
+        if op == "isrepo":
+            return str(G.is_repo(wd)).lower()
+        raise ValueError(f"未知 git 操作: {op}")
+
     def _web_search(self, args: dict) -> str:
         from .web import web_search, WebError
         q = str(args.get("query", "")).strip()
