@@ -60,7 +60,11 @@ class Plugin:
         """加载入口代码模块（无 entry 则返回 None）。显式 enable 才启副作用。"""
         if not self.entry:
             return None
-        entry_path = (self.base / self.entry).resolve()
+        base = self.base.resolve()
+        entry_path = (base / self.entry).resolve()
+        # 防路径穿越：entry 必须落在插件目录内，禁止 ../ 逃逸加载外部代码
+        if not entry_path.is_relative_to(base):
+            raise PluginError(f"插件 {self.id}: 入口越界(路径穿越) {self.entry}")
         if not entry_path.exists():
             raise PluginError(f"插件 {self.id}: 入口 {self.entry} 不存在")
         spec = importlib.util.spec_from_file_location(

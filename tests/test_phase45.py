@@ -125,9 +125,9 @@ class VaultTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             v = Vault(tmp, master_password="right")
             v.set("k", "v")
-            v2 = Vault(tmp, master_password="wrong")
+            # 错误密码在打开时立即抛错（更早防护，杜绝静默写入污染）
             with self.assertRaises(ValueError):
-                v2.get("k")
+                Vault(tmp, master_password="wrong")
 
     def test_payment_tier_guards(self):
         with tempfile.TemporaryDirectory() as tmp:

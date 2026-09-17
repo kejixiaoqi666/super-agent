@@ -27,6 +27,7 @@ try:
     _HAS_CRYPTO = True
 except Exception:
     _HAS_CRYPTO = False
+    InvalidToken = Exception  # cryptography 缺失时兜底，避免 NameError
 
 _TIERS = ("normal", "high", "payment")
 
@@ -44,23 +45,33 @@ class Vault:
         self._master = master_password
         self._fernet = None
         self._salt = b""
+        self._verify_token = None
         self._entries: Dict[str, dict] = {}
         if not self.path.exists():
             if not create_if_missing:
                 raise FileNotFoundError(f"vault not found: {self.path}")
             self._init_new()
         self._load()
+        # 打开后校验主密码：错误密码立即抛错，禁止后续静默写入污染数据
+        self._verify_master_password()
 
     # ---- 初始化 / 密钥 ----
     def _init_new(self) -> None:
         self._salt = os.urandom(16)
         self._entries = {}
+        # 校验令牌：用派生密钥加密一个已知字符串，打开时解密它来验证主密码
+        self._verify_token = None
         self._save()
 
     def _derive_key(self) -> bytes:
         kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32,
                          salt=self._salt, iterations=200_000)
         return base64.urlsafe_b64encode(kdf.derive(self._master.encode()))
+
+    def _make_verify_token(self) -> str:
+        """用当前密钥加密校验令牌（存盘供主密码校验）。"""
+        token = self._fernet.encrypt(b"super-agent-vault-ok")
+        return token.decode()
 
     def _fernet_ok(self) -> bool:
         if self._fernet is None:
@@ -75,6 +86,7 @@ class Vault:
             raise RuntimeError("cryptography 库缺失，无法加密存储凭据")
         payload = json.dumps({
             "salt": base64.b64encode(self._salt).decode(),
+            "verify": self._make_verify_token(),  # 主密码校验令牌
             "entries": self._entries,  # 值已是 fernet token 密文
         })
         tmp = self.path.with_suffix(".tmp")
@@ -90,10 +102,36 @@ class Vault:
             self._salt = base64.b64decode(data.get("salt", ""))
             # 重新派生密钥（salt 在 load 后才知道）
             self._fernet = Fernet(self._derive_key())
+            self._verify_token = data.get("verify")
             self._entries = data.get("entries", {})
         except Exception:
-            # 解密失败/文件损坏 → 空（避免崩溃；稍后可提示）
+            # 文件损坏 → 空；主密码校验在 _verify_master_password 统一处理
             self._entries = {}
+
+    def _verify_master_password(self) -> None:
+        """打开后校验主密码。错误密码立即抛错，防止后续静默写入污染数据。
+
+        用存储的 verify 令牌解密验证；令牌缺失（旧库）时用最新一条凭据
+        试解密兜底。两者都不存在（空库）则假定通过。
+        """
+        if not _HAS_CRYPTO or (self._verify_token is None and not self._entries):
+            return  # 无密码本内容可验（空库），视为通过
+        fernet = self._fernet
+        if fernet is None:
+            raise ValueError("主密码校验不可用（cryptography 缺失）")
+        if self._verify_token is not None:
+            try:
+                if fernet.decrypt(self._verify_token.encode()) != b"super-agent-vault-ok":
+                    raise ValueError("主密码错误：无法解密密码本")
+                return
+            except (InvalidToken, ValueError):
+                raise ValueError("主密码错误：无法解密密码本") from None
+        # 旧库无 verify 令牌：用最新一条凭据试解密
+        try:
+            newest = max(self._entries.values(), key=lambda e: e.get("updated_at", 0))
+            fernet.decrypt(newest["token"].encode())
+        except Exception:
+            raise ValueError("主密码错误：无法解密密码本") from None
 
     # ---- 凭据 CRUD ----
     def set(self, name: str, value: str, tier: str = "normal",

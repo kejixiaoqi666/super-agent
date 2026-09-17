@@ -69,8 +69,12 @@ class AssetStore:
         path.write_text(text, encoding="utf-8")
         return path
 
-    def classify(self, path: str | Path) -> Path:
-        """按扩展名自动分类并（可选）移入对应资产目录。返回目标路径。"""
+    def classify(self, path: str | Path, move: bool = True) -> Path:
+        """按扩展名自动分类并（可选）移入对应资产目录。返回目标路径。
+
+        move=True 时把源文件移动到分类目录；move=False 仅计算目标路径不移动。
+        若目标已存在则自动追加序号避免覆盖。
+        """
         src = Path(path).resolve()
         if not src.exists():
             return src
@@ -91,6 +95,8 @@ class AssetStore:
         while dest.exists():
             dest = target_dir / f"{src.stem}_{i}{src.suffix}"
             i += 1
+        if move:
+            src.rename(dest)
         return dest
 
 

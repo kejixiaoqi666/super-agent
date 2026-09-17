@@ -235,6 +235,7 @@ class Body:
         """提交并运行一个自主任务，返回任务摘要。
 
         verify_claims: [{claim, kind, path/content/...}, ...] 可选，交付前验收。
+        注意：不修改调用方传入的 verify_claims（内部拷贝）。
         """
         brain = self.brain(session)
         task = self.loop.submit(goal, owner=owner)
@@ -242,8 +243,10 @@ class Body:
         if verify_claims:
             gate = VerificationGate(self.workspace)
             for c in verify_claims:
-                claim = c.pop("claim"); kind = c.pop("kind")
-                gate.add(claim, kind, **c)
+                claim = c["claim"]; kind = c["kind"]
+                # 拷贝剩余字段，避免 c.pop 破坏调用方字典
+                extra = {k: v for k, v in c.items() if k not in ("claim", "kind")}
+                gate.add(claim, kind, **extra)
         return self.loop.run(task.task_id, brain, verifier=gate)
 
     def task_status(self, task_id=None):

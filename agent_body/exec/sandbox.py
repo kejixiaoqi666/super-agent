@@ -37,6 +37,13 @@ def _is_dangerous(cmd: str) -> Optional[str]:
     return None
 
 
+def _safe_task_id(task_id: str) -> str:
+    """清洗 task_id：只保留安全字符，杜绝 ../ 路径穿越。"""
+    tid = "".join(c for c in task_id if c.isalnum() or c in "-_.")
+    tid = tid.strip(".")
+    return tid or "adhoc"
+
+
 class CommandError(RuntimeError):
     def __init__(self, cmd: str, code: int, output: str = ""):
         super().__init__(f"命令退出码 {code}: {cmd}")
@@ -52,7 +59,9 @@ class Sandbox:
         self._active: Dict[str, Path] = {}
 
     def _dir(self, task_id: str) -> Path:
-        d = self.base / task_id
+        # 防路径穿越：task_id 只取安全字符，杜绝 ../ 逃逸沙箱根
+        tid = _safe_task_id(task_id)
+        d = self.base / tid
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -114,8 +123,10 @@ class Sandbox:
 
     def cleanup(self, task_id: str) -> None:
         """显式回收某个任务的沙箱目录。"""
-        d = self.base / task_id
-        shutil.rmtree(d, ignore_errors=True)
+        tid = _safe_task_id(task_id)
+        d = self.base / tid
+        if d.is_relative_to(self.base):  # 双保险：绝不删沙箱根之外
+            shutil.rmtree(d, ignore_errors=True)
         self._active.pop(task_id, None)
 
     def cleanup_all(self) -> int:
