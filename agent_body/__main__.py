@@ -169,6 +169,29 @@ def main():
                     else:
                         txt = body.skill_instructions(*parts)
                         print(txt if txt else "（这些技能不存在）")
+                elif message.startswith("/cron-add"):
+                    # /cron-add <id> <spec> <提示词...>
+                    parts = message.split(maxsplit=3)
+                    if len(parts) < 3:
+                        print("用法: /cron-add <id> <规格(@every 30m|五段cron|@ISO)> [提示词]")
+                    else:
+                        job_id, spec = parts[1], parts[2]
+                        prompt = parts[3] if len(parts) > 3 else ""
+                        try:
+                            job = body.cron_add(job_id, spec, payload={"prompt": prompt})
+                            print(f"✅ 已添加 {job_id} -> 下次 {job['next_run']}")
+                        except ValueError as e:
+                            print(f"规格无效: {e}")
+                elif message == "/cron-list":
+                    for j in body.cron_list():
+                        print(f"- {j['id']} 规格={j['spec']} "
+                              f"下次={j['next_run']} 已跑{j['count']}次")
+                elif message.startswith("/cron-rm"):
+                    parts = message.split()
+                    if len(parts) < 2:
+                        print("用法: /cron-rm <id>")
+                    else:
+                        print("已删除" if body.cron_rm(parts[1]) else "不存在")
                 else:
                     print(body.chat(args.session, message)["reply"])
     finally:

@@ -73,6 +73,24 @@ class Body:
         self.skills = SkillStore(Path(workspace) / "skills",
                                  self.storage.assets_dir / "skills",
                                  Path(data_dir) / "skills")
+        # 定时任务：@every / cron / 一次性，持久化到 scheduler.json
+        from .scheduler import CronScheduler
+        self.scheduler = CronScheduler(Path(data_dir))
+
+    # ---- 定时任务（cron）----
+    def cron_add(self, job_id: str, spec: str, payload=None) -> dict:
+        return self.scheduler.add(job_id, spec, payload=payload)
+
+    def cron_list(self) -> list:
+        return [{"id": j["id"], "spec": j["spec"],
+                 "next_run": j["next_run"], "count": j["count"]}
+                for j in self.scheduler.jobs.values()]
+
+    def cron_rm(self, job_id: str) -> bool:
+        return self.scheduler.remove(job_id)
+
+    def cron_run_due(self, runner=None) -> list:
+        return self.scheduler.run_due(runner=runner)
 
     # ---- 技能（skills/**/SKILL.md）----
     def scan_skills(self) -> list:
