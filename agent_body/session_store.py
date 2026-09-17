@@ -50,15 +50,20 @@ class SessionStore:
 
     def record(self, session: str, content: str, role: str = "user",
                ts: Optional[float] = None) -> int:
-        """记一条消息并加入 FTS5 索引。"""
+        """记一条消息并加入 FTS5 索引（两 insert 在同一事务，保证一致）。"""
         ts = ts if ts is not None else time.time()
-        cur = self.conn.execute(
-            "INSERT INTO transcript(session, ts, role, content) VALUES(?,?,?,?)",
-            (session, ts, role, content))
-        self.conn.execute(
-            "INSERT INTO transcript_fts(content, session, ts) VALUES(?,?,?)",
-            (content, session, ts))
-        self.conn.commit()
+        self.conn.execute("BEGIN")
+        try:
+            cur = self.conn.execute(
+                "INSERT INTO transcript(session, ts, role, content) VALUES(?,?,?,?)",
+                (session, ts, role, content))
+            self.conn.execute(
+                "INSERT INTO transcript_fts(content, session, ts) VALUES(?,?,?)",
+                (content, session, ts))
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
         return cur.lastrowid
 
     def search(self, query: str, k: int = 10) -> List[Dict]:
