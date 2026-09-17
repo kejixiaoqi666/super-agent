@@ -77,6 +77,9 @@ class Body:
         from .scheduler import CronScheduler
         self.scheduler = CronScheduler(Path(data_dir))
         self.cron_output: dict = {}           # cron 最近执行结果(job_id -> text)
+        # 生命周期钩子（pre/post tool 等事件）
+        from .hooks import HookRegistry
+        self.hooks = HookRegistry()
         # 会话全文检索：自动给每个对话记入 transcript.db，供 /search 检索
         self.transcript = None
         try:
@@ -231,14 +234,19 @@ class Body:
         _ensure_schema({"command": command}, self._EXEC_SCHEMA, "exec 入参")
         if self.policy.mode != "unrestricted":
             raise PermissionError("shell requires unrestricted mode")
+        self.hooks.dispatch("pre_tool", tool="shell",
+                            args={"command": command})
         # Output goes to a file so a noisy child cannot exhaust host memory.
         import tempfile
         with tempfile.TemporaryFile() as output:
             result = subprocess.run(command, shell=True, cwd=self.workspace,
                                     stdout=output, stderr=subprocess.STDOUT, timeout=30)
             output.seek(0)
-            return {"exit_code": result.returncode,
-                    "output": output.read(16000).decode("utf-8", errors="replace")}
+            res = {"exit_code": result.returncode,
+                   "output": output.read(16000).decode("utf-8", errors="replace")}
+        self.hooks.dispatch("post_tool", tool="shell",
+                            args={"command": command}, result=res)
+        return res
 
     def brain(self, session):
         if self.closed:

@@ -84,6 +84,22 @@ class RuntimeWiringTest(unittest.TestCase):
         finally:
             body.close()
 
+    def test_exec_fires_pre_post_hooks(self):
+        root = Path(tempfile.mkdtemp())
+        body = Body(root / "state", root / "work", mode="unrestricted",
+                    llm=_Scripted())
+        try:
+            order = []
+            body.hooks.register("pre_tool", lambda **c: order.append("pre"))
+            body.hooks.register("post_tool", lambda **c: order.append("post"))
+            r = body._exec("echo hi")
+            self.assertEqual(r["exit_code"], 0)
+            self.assertEqual(order, ["pre", "post"])
+            self.assertEqual(body.hooks.fired("pre_tool"), 1)
+            self.assertIn("hi", r["output"])
+        finally:
+            body.close()
+
 
 if __name__ == "__main__":
     unittest.main()
