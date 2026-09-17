@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from agent_body.delegation import (
     delegate_task, parallel_delegate,
@@ -114,7 +115,7 @@ class RobustnessTest(unittest.TestCase):
     def test_subagent_tool_dispatch_error_handled(self):
         def bad_dispatch(name, args):
             raise RuntimeError("tool boom")
-        r = _Scripted([{"content": "", "tool_calls": _tool_call("ls", "{}")},
+        r = _Scripted([{"content": "", "tool_calls": _tool_call("ls", "{")},
                        {"content": "done", "tool_calls": []}])
         out = delegate_task(r, "x", tool_dispatch=bad_dispatch,
                             tools=({"name": "ls"},))
@@ -123,6 +124,109 @@ class RobustnessTest(unittest.TestCase):
         last = r.calls[-1]
         tool_msgs = [m for m in last.messages if m["role"] == "tool"]
         self.assertIn("tool boom", tool_msgs[0]["content"])
+
+
+from agent_body.delegation import (
+    DelegationGovernor, DelegationLimitError, make_session_scoped_dispatch,
+)
+
+
+class _Policy:
+    """模拟 BodyPolicy：needs_approval(name, cat, side)。"""
+
+    def __init__(self, deny_writes=True, deny_exec=True):
+        self.deny_writes = deny_writes
+        self.deny_exec = deny_exec
+
+    def needs_approval(self, name, category, side_effects):
+        if side_effects == "write":
+            return self.deny_writes
+        if side_effects == "exec":
+            return self.deny_exec
+        return False
+
+
+class GovernorTest(unittest.TestCase):
+    def test_caps_concurrency(self):
+        g = DelegationGovernor(max_concurrent=4, total_step_budget=100)
+        plan = g.govern(6, requested_concurrent=10)
+        self.assertEqual(plan.concurrency, 4)   # 请求10被压到cap 4
+        self.assertEqual(plan.total_steps, 6 * 6)
+
+    def test_honors_lower_request(self):
+        g = DelegationGovernor(max_concurrent=4)
+        plan = g.govern(2, requested_concurrent=2)
+        self.assertEqual(plan.concurrency, 2)
+
+    def test_step_budget_scales_down(self):
+        g = DelegationGovernor(total_step_budget=64, per_default_steps=6)
+        plan = g.govern(10, requested_steps=10)   # 10*10=100 > 64
+        self.assertEqual(plan.steps_each, 6)      # 64//10=6
+        self.assertEqual(plan.total_steps, 60)
+        self.assertTrue(plan.warnings)            # 有预算受限警告
+
+    def test_batch_too_large_rejected(self):
+        g = DelegationGovernor(max_batch=8)
+        with self.assertRaises(DelegationLimitError):
+            g.govern(9)
+
+    def test_zero_tasks_rejected(self):
+        with self.assertRaises(DelegationLimitError):
+            DelegationGovernor().govern(0)
+
+    def test_parallel_respects_governor_step_budget(self):
+        # 大量任务×大步数被压低 → 每个子代理在压低后步数内截断
+        g = DelegationGovernor(total_step_budget=8, per_default_steps=4)
+        plan = g.govern(4, requested_steps=4)      # 4*4=16>8 → 每任务2步
+        self.assertEqual(plan.steps_each, 2)
+
+
+class SessionScopedDispatchTest(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / "main.txt").write_text("main-data", encoding="utf-8")
+
+    def test_write_lands_in_session_sandbox(self):
+        pol = _Policy(deny_writes=False, deny_exec=True)
+        dispatch, sandbox = make_session_scoped_dispatch(
+            pol, "sessA", self.tmp)
+        out = dispatch("write_file", {"path": "out.txt", "content": "hi"})
+        self.assertIn("已写入委派沙箱", out)
+        self.assertTrue((sandbox / "out.txt").exists())
+        # 主工作区根目录没有 out.txt（隔离，不污染）
+        self.assertFalse((self.tmp / "out.txt").exists())
+        # 不同会话沙箱不同
+        _, sandboxB = make_session_scoped_dispatch(pol, "sessB", self.tmp)
+        self.assertNotEqual(sandbox, sandboxB)
+
+    def test_readonly_policy_denies_write_and_exec(self):
+        pol = _Policy(deny_writes=True, deny_exec=True)
+        dispatch, _ = make_session_scoped_dispatch(pol, "s", self.tmp)
+        self.assertIn("权限拒绝", dispatch("write_file", {"path": "a", "content": "x"}))
+        self.assertIn("权限拒绝", dispatch("exec", {"command": "rm -rf /"}))
+
+    def test_path_escape_refused(self):
+        pol = _Policy(deny_writes=False)
+        dispatch, _ = make_session_scoped_dispatch(pol, "s", self.tmp)
+        out = dispatch("write_file", {"path": "../escape.txt", "content": "x"})
+        self.assertIn("逃出委派沙箱", out)
+        self.assertFalse((self.tmp / "escape.txt").exists())
+
+    def test_read_workspace_and_sandbox(self):
+        pol = _Policy()
+        dispatch, sandbox = make_session_scoped_dispatch(pol, "s", self.tmp)
+        (sandbox / "note.txt").write_text("sandbox-data", encoding="utf-8")
+        self.assertEqual(dispatch("read_file", {"path": "main.txt"}),
+                         "main-data")
+        self.assertEqual(dispatch("read_file", {"path": "note.txt"}),
+                         "sandbox-data")
+
+    def test_exec_is_isolated_not_run(self):
+        pol = _Policy(deny_exec=False)   # 即使允许也不真执行
+        dispatch, _ = make_session_scoped_dispatch(pol, "s", self.tmp)
+        out = dispatch("exec", {"command": "whoami"})
+        self.assertIn("已隔离", out)
 
 
 if __name__ == "__main__":

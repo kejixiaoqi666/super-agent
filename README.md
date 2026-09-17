@@ -24,6 +24,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | 成熟补齐2 | **技能系统**(发现/加载/注入SKILL.md) / **真实Provider路由**(失败切换) / **子代理委派**(并行) / **会话FTS检索**(中文) / **Cron定时** / **网关鉴权**(白名单+哈希key) | `skills.py` `model_router.py` `delegation.py` `session_store.py` `scheduler.py` `auth.py` |
 | 成熟补齐3 | **Web搜索/抓取工具**(真实) / **模型无关视觉**(感知哈希/状态色) / **多模态图像输入**(base64识图) / **Git集成** / **生命周期钩子** / **Plan模式** | `web.py` `vision.py` `git.py` `hooks.py` `planner.py` |
 | 成熟补齐4 | **经验自动固化**(重复成功→SKILL.md) / **跨会话自我重建**(/new不失忆) / **预动性**(主动预测并预检用户下一步, /next + 数据驱动习惯学习 /learn) | `skill_compiler.py` `handover.py` `proactive.py` |
+| 成熟补齐5 | **委派资源治理**(并行cap+步预算+批次上限) / **会话权限隔离**(委派子代理默认只读, 写入/执行落session沙箱) | `delegation.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 

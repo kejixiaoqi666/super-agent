@@ -170,6 +170,45 @@ class Body:
         return delegate_task(self.build_router(), goal, context,
                              max_steps=max_steps, tool_dispatch=tool_dispatch)
 
+    def scoped_delegate(self, goal: str, context: str = "",
+                        session: str = "default", max_steps: int = 6,
+                        policy=None) -> dict:
+        """委派一个**会话隔离**的子代理：默认只读，写/执行落 session 沙箱。
+
+        即便主 body 是 unrestricted，委派出去的子代理也被策略收紧，防误写主工作区。
+        """
+        from .delegation import delegate_task, make_session_scoped_dispatch
+        dispatch, _ = make_session_scoped_dispatch(
+            policy if policy is not None else self.policy,
+            session, str(self.workspace))
+        return delegate_task(self.build_router(), goal, context,
+                             max_steps=max_steps, tool_dispatch=dispatch)
+
+    def delegate_parallel(self, goals, contexts=None, max_concurrent: int = 4,
+                          max_steps: int = 6, governor=None) -> dict:
+        """并行委派多个子代理，受资源治理（并行cap+步预算+批次上限）约束。
+
+        goals: List[str] 或 [{goal,context}, ...]；返回 {results, plan}。
+        """
+        from .delegation import DelegationGovernor, parallel_delegate
+        gov = governor or DelegationGovernor(max_concurrent=max_concurrent,
+                                             per_default_steps=max_steps)
+        tasks = []
+        for i, g in enumerate(goals):
+            if isinstance(g, dict):
+                tasks.append(g)
+            else:
+                c = (contexts[i] if contexts and i < len(contexts) else "")
+                tasks.append((g, c))
+        plan = gov.govern(len(tasks), requested_concurrent=max_concurrent,
+                          requested_steps=max_steps)
+        results = parallel_delegate(
+            self.build_router(), tasks, max_concurrent=max_concurrent,
+            governor=gov, max_steps=max_steps)
+        return {"results": results, "message": "; ".join(plan.warnings),
+                "concurrency": plan.concurrency,
+                "total_steps": plan.total_steps}
+
     # ---- Phase 4/5 便捷入口（供 CLI/TUI/Bot 用）----
     def open_vault(self, master_password: str) -> Vault:
         """打开（或首次创建）密码本。主密码不落盘，仅用于派生密钥。"""
