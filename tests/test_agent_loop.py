@@ -6,6 +6,7 @@ from pathlib import Path
 from agent_body.loop import (AgentLoop, TaskState, TaskStatus,
                              VerificationGate, FailureClassifier)
 from agent_body.loop.task import TaskStore
+from agent_body.safety.selfcheck import SelfCheck, CheckReport
 
 
 class FakeBrain:
@@ -64,6 +65,42 @@ class TaskStateMachineTest(unittest.TestCase):
         self.assertEqual(t.next_pending_step(), 1)  # 从 b 继续
         t.record_step(1, "b", "ok", True)
         self.assertEqual(t.next_pending_step(), 2)
+
+    def test_resume_skips_failed_step_no_infinite_loop(self):
+        """回归：失败步骤也算已消费，续跑不卡死同一步骤（死循环防护）。"""
+        t = TaskState("目标", plan=["a", "b", "c"])
+        t.record_step(0, "a", "失败", False)  # 失败步骤
+        self.assertEqual(t.next_pending_step(), 1)  # 跳过失败的a，从b继续
+        t.record_step(1, "b", "ok", True)
+        self.assertEqual(t.next_pending_step(), 2)
+
+    def test_selfcheck_retry_budget_prevents_infinite_loop(self):
+        """回归：selfcheck 永远 ok + brain 永远失败 → 重试预算耗尽 FAILED，非无限循环。"""
+        class AlwaysOk(SelfCheck):
+            def run(self, target, category="unknown", max_retries=2,
+                    timeout=15.0, recheck=None):
+                return CheckReport(ok=True, phase="recheck",
+                                   findings=["[复验] 通过"])
+
+        class Boom(FakeBrain):
+            def chat(self, message, person_id=None):
+                raise RuntimeError("始终失败")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            work = Path(tmp) / "work"
+            work.mkdir(parents=True, exist_ok=True)
+            # 熔断阈值调大，让 selfcheck 重试预算先耗尽（验证该防护独立生效）
+            from agent_body.safety import CircuitBreaker
+            loop = AgentLoop(data, work, lambda s: Boom(),
+                             max_steps=10, selfcheck=AlwaysOk(),
+                             breaker=CircuitBreaker(failure_threshold=999))
+            t = loop.submit("目标")
+            t.add_plan(["步骤1"])  # 单步，会一直触发重试
+            s = loop.run(t.task_id, Boom())
+            # 预算耗尽后失败，不无限循环
+            self.assertEqual(s["status"], "failed")
+            self.assertIn("重试预算耗尽", s["failure"]["reason"])
 
 
 class TaskStoreTest(unittest.TestCase):

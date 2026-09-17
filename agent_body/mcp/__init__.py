@@ -57,6 +57,7 @@ class MCPClient:
         self.timeout = timeout
         self._pending: Dict[int, threading.Event] = {}
         self._responses: Dict[int, dict] = {}
+        self._lock = threading.Lock()        # 保护 _pending/_responses
         self._init_lock = threading.Lock()
         env_all = dict(os.environ)
         if env:
@@ -81,8 +82,10 @@ class MCPClient:
             except json.JSONDecodeError:
                 continue
             if isinstance(msg, dict) and "id" in msg:
-                self._responses[msg["id"]] = msg
-                ev = self._pending.pop(msg["id"], None)
+                # 锁保护 pending/responses，避免与 _request 竞态丢通知
+                with self._lock:
+                    self._responses[msg["id"]] = msg
+                    ev = self._pending.pop(msg["id"], None)
                 if ev is not None:
                     ev.set()
 
@@ -93,10 +96,20 @@ class MCPClient:
         self._stdin.write(json.dumps(_make_request(method, params, req_id)) + "\n")
         self._stdin.flush()
         ev = threading.Event()
-        self._pending[req_id] = ev
+        with self._lock:
+            # 兜底：响应可能极快已到（读线程已写 responses），先查再挂 pending
+            if req_id in self._responses:
+                msg = self._responses.pop(req_id, {})
+                if "error" in msg:
+                    raise MCPError(f"{self.name}: {method} 错误: {msg['error']}")
+                return msg.get("result", {})
+            self._pending[req_id] = ev
         if not ev.wait(self.timeout):
+            with self._lock:
+                self._pending.pop(req_id, None)  # 超时清理，避免泄漏
             raise MCPError(f"{self.name}: 请求 {method} 超时")
-        msg = self._responses.pop(req_id, {})
+        with self._lock:
+            msg = self._responses.pop(req_id, {})
         if "error" in msg:
             raise MCPError(f"{self.name}: {method} 错误: {msg['error']}")
         return msg.get("result", {})

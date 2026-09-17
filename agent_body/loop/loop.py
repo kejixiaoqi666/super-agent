@@ -102,6 +102,7 @@ class AgentLoop:
 
         # 断点续跑：找到下一个未完成的步骤
         idx = t.next_pending_step()
+        retry_budget = self.max_steps  # 重试预算：整任务最多 max_steps 次重试，防死循环
         while idx is not None:
             if len(t.steps) >= self.max_steps:
                 t.set_failure("not_feasible", f"超过最大步骤 {self.max_steps}")
@@ -135,12 +136,18 @@ class AgentLoop:
                     t.goal, category=fc["category"],
                     recheck=lambda goal: _safe_recheck(brain, goal))
                 t.record_selfcheck(report.to_dict())
-                # 自查成功（自愈 + 复验通过）→ 重试该步（消耗一次重试预算）
-                if report.ok and idx not in {s.get("index") for s in t.steps if s.get("ok")}:
-                    # 清掉刚才那条失败记录，重跑该步（用重试预算换一次机会）
+                # 自查成功（自愈 + 复验通过）→ 重试该步，消耗一次重试预算
+                if report.ok and retry_budget > 0:
+                    retry_budget -= 1
+                    # 清掉刚才那条失败记录，重跑该步
                     t.steps = [s for s in t.steps if not (s.get("index") == idx and not s.get("ok"))]
                     self.store.save(t)
                     continue
+                if report.ok and retry_budget <= 0:
+                    t.set_failure(fc["category"], "重试预算耗尽，仍无法完成该步")
+                    t.transition(TaskStatus.FAILED)
+                    self.store.save(t)
+                    return t.summary()
                 t.set_failure(fc["category"], fc["reason"] + " | " + " | ".join(report.findings))
                 t.transition(TaskStatus.FAILED)
                 self.store.save(t)

@@ -78,10 +78,15 @@ class TaskState:
         self.updated_at = time.time()
 
     def next_pending_step(self) -> Optional[int]:
-        """返回下一个未执行完的 plan 下标（断点续跑用）。"""
-        done = {s.get("index") for s in self.steps if s.get("ok")}
+        """返回下一个未尝试过的 plan 下标（断点续跑用）。
+
+        已尝试过的步骤（无论成功失败）都视为已消费，续跑跳过，避免
+        resume 卡死在同一个失败步骤无限重试。重试逻辑由 run() 的重试
+        预算/熔断控制，不走续跑游标。
+        """
+        tried = {s.get("index") for s in self.steps}
         for i in range(len(self.plan)):
-            if i not in done:
+            if i not in tried:
                 return i
         return None
 
