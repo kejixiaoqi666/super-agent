@@ -44,6 +44,9 @@ class Body:
         self.closed = False
         # AgentLoop：自主执行引擎（任务状态机/验证门禁/记忆记录/断点续跑）
         self.loop = AgentLoop(str(data_dir), workspace, self.brain)
+        # TaskQueue：连贯任务队列（串行+依赖，接入 run_chain）
+        from .loop import TaskQueue
+        self.queue = TaskQueue(str(data_dir), self.loop.store)
         # TokenStats：token 计费 + 上下文统计
         self.stats = TokenStats(str(data_dir))
         # 当前对话模型（供计费换算）
@@ -248,6 +251,35 @@ class Body:
                 extra = {k: v for k, v in c.items() if k not in ("claim", "kind")}
                 gate.add(claim, kind, **extra)
         return self.loop.run(task.task_id, brain, verifier=gate)
+
+    def run_chain(self, goals, chain_id="chain", session="task"):
+        """串行执行一串有依赖的任务(连贯任务队列)。
+
+        goals: [目标1, 目标2, ...]，按序执行，前一个 DONE 才进下一个；
+        任一环失败 → 该环及后续全部进未完成清单，可 /resume 续跑。
+        返回各任务的最终摘要列表。
+        """
+        self.queue.enqueue(chain_id, list(goals))
+        summaries = []
+        while True:
+            item = self.queue.next()
+            if item is None:
+                break
+            brain = self.brain(session)
+            summary = self.loop.run(item.task_id, brain)
+            status = summary.get("status")
+            if status == "done":
+                self.queue.on_task_done(item.task_id)
+            else:
+                # 失败/取消：该环及后续同链任务进未完成清单
+                affected = self.queue.on_task_failed(item.task_id)
+                summaries.append(summary)
+                summaries.extend(
+                    {"task_id": a.task_id, "goal": a.goal, "status": "pending"}
+                    for a in affected)
+                break
+            summaries.append(summary)
+        return summaries
 
     def task_status(self, task_id=None):
         """查任务进度；task_id 缺省列出所有任务摘要。"""

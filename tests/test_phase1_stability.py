@@ -137,6 +137,36 @@ class TaskQueueTest(unittest.TestCase):
             self.assertEqual(len(affected), 2)  # 该环及后续同链都进未完成
             self.assertEqual(q.pending_count(), 0)
 
+    def test_run_chain_integration(self):
+        """回归：TaskQueue 已接入 Body.run_chain（原为孤立死代码），串行执行。"""
+        from agent_body.runtime import Body
+
+        class FakePort:
+            def __init__(self, fail_on=None):
+                self.fail_on = fail_on
+                self.said = []
+            def chat(self, msg, person_id=None):
+                self.said.append(msg)
+                return "ok"
+            def recall(self, q, k=10): return []
+            def remember(self, c, scope="", tier="", **kw): return "id"
+            def save(self): pass
+            def close(self): pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            work = Path(tmp) / "work"
+            body = Body(data, work, mode="unrestricted")
+            try:
+                body.brains["task"] = FakePort()
+                # 串行执行 2 个任务（无 plan → 单步=整个目标）
+                res = body.run_chain(["任务一", "任务二"], chain_id="c9")
+                self.assertEqual(len(res), 2)
+                self.assertEqual([r["status"] for r in res], ["done", "done"])
+                self.assertEqual(body.queue.pending_count(), 0)  # 全部出队
+            finally:
+                body.close()
+
 
 # ---------- 进度条 ----------
 class ProgressTest(unittest.TestCase):

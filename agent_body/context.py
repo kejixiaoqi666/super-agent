@@ -54,7 +54,11 @@ class ProjectContext:
     def set_project(self, project: str, goal: str = "",
                     tags: Optional[List[str]] = None,
                     focus: str = "") -> None:
-        """切换/设定当前项目。旧项目入历史。"""
+        """切换/设定当前项目。旧项目入历史。
+
+        tags 未传(None) = 清空标签(全新项目)；传了则整体替换。
+        避免旧项目标签残留污染新项目检索。
+        """
         old = self.data["project"]
         if old and old != project:
             self.data["history"].append({
@@ -64,8 +68,10 @@ class ProjectContext:
         self.data["project"] = project
         self.data["goal"] = goal
         self.data["focus"] = focus
-        if tags:
+        if tags is not None:
             self.data["tags"] = list(dict.fromkeys(tags))  # 去重保序
+        else:
+            self.data["tags"] = []
         self._save()
 
     def add_tag(self, tag: str) -> None:
