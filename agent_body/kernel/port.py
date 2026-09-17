@@ -37,7 +37,8 @@ class BrainPort(ABC):
 
     # ---- 会话与生命周期 ----
     @abstractmethod
-    def chat(self, message: str, person_id: Optional[str] = None) -> str: ...
+    def chat(self, message: str, person_id: Optional[str] = None,
+             images: Optional[List[str]] = None) -> str: ...
     @abstractmethod
     def remember(self, content: str, scope: str = "user", tier: str = "recall", **kw) -> str: ...
     @abstractmethod

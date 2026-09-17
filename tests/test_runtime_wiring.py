@@ -70,6 +70,20 @@ class RuntimeWiringTest(unittest.TestCase):
         finally:
             body.close()
 
+    def test_chat_image_builds_multimodal_and_replies(self):
+        import io
+        from PIL import Image
+        body = self._make_body()
+        try:
+            buf = io.BytesIO()
+            Image.new("RGB", (32, 32), (200, 30, 30)).save(buf, "PNG")
+            img_bytes = buf.getvalue()
+            r = body.chat_image("s9", img_bytes, message="看看这张图")
+            self.assertIn("reply", r)
+            self.assertTrue(r["reply"])
+        finally:
+            body.close()
+
 
 if __name__ == "__main__":
     unittest.main()

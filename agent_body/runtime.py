@@ -2,7 +2,7 @@
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union
 
 from .kernel import BrainTool, default_registry
 from .loop import AgentLoop, VerificationGate
@@ -314,6 +314,37 @@ class Body:
             "elapsed_seconds": round(time.monotonic() - started, 3),
             "dropped_memory": curated.dropped,
         }
+
+    def chat_image(self, session: str, image: Union[str, Path, bytes],
+                   message: str = "看看这张图", person_id=None) -> dict:
+        """带图对话：读图 → base64 data URL → 交给大脑多模态识别（模型识图，非本地OCR）。"""
+        import base64
+        if isinstance(image, bytes):
+            raw = image
+        else:
+            raw = Path(image).read_bytes()
+        if not raw:
+            raise ValueError("无法读取图片")
+        mime = "image/png"
+        if isinstance(image, (str, Path)):
+            ext = str(image).lower()
+            if ext.endswith((".jpg", ".jpeg")):
+                mime = "image/jpeg"
+            elif ext.endswith(".webp"):
+                mime = "image/webp"
+        data_url = f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
+        brain = self.brain(session)
+        with self.tracer.span("chat_image", session=session):
+            reply = brain.chat(message, person_id=person_id or session,
+                               images=[data_url])
+            brain.save()
+        if self.transcript is not None:
+            try:
+                self.transcript.record(session, f"[图] {message}", role="user")
+                self.transcript.record(session, reply, role="assistant")
+            except Exception:
+                pass
+        return {"reply": reply}
 
     def set_project(self, project: str, goal: str = "",
                     tags: Optional[List[str]] = None, focus: str = "") -> dict:

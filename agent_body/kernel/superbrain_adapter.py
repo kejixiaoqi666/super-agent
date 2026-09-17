@@ -122,8 +122,9 @@ class SuperBrainAdapter(BrainPort):
             return default
         return val()
 
-    def chat(self, message, person_id=None):
-        return self._require_brain().chat(message, person_id=person_id or self._session)
+    def chat(self, message, person_id=None, images=None):
+        return self._require_brain().chat(
+            message, person_id=person_id or self._session, images=images)
 
     def remember(self, content, scope="user", tier="recall", **kw):
         return self._brain.remember(content, scope=scope, tier=tier, **kw)
