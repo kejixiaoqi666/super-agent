@@ -23,7 +23,7 @@ from typing import Callable, Dict, List, Optional
 
 _EVERY = re.compile(r"^@every\s+(\d+)\s*(s|m|h|d)?$")
 _UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-JobRunner = Callable[[str], None]  # (job_id) -> None
+JobRunner = Callable[[dict], None]  # (job dict) -> None；含 payload，可在一性次移除后读取
 
 
 def _to_epoch(dt: datetime) -> float:
@@ -164,7 +164,8 @@ class CronScheduler:
                 if j["next_run"] is not None and j["next_run"] <= now]
 
     def run_due(self, now: Optional[float] = None, runner: Optional[JobRunner] = None):
-        """执行所有到期任务；默认以 job 的 payload 内容作为提示文本喂给 runner。"""
+        """执行所有到期任务；runner 收到完整 job dict（含 payload，可在一次性任务
+        移除后仍读到其内容）。默认以 payload.prompt 交给上层执行。"""
         now = now if now is not None else self.clock()
         ran = []
         for job in self.due(now):
@@ -179,7 +180,7 @@ class CronScheduler:
             job["count"] += 1
             ran.append(job["id"])
             if runner:
-                runner(job["id"])
+                runner(job)
         if ran:
             self._save()
         return ran

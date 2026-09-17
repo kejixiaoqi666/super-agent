@@ -76,6 +76,20 @@ class Body:
         # 定时任务：@every / cron / 一次性，持久化到 scheduler.json
         from .scheduler import CronScheduler
         self.scheduler = CronScheduler(Path(data_dir))
+        self.cron_output: dict = {}           # cron 最近执行结果(job_id -> text)
+        # 会话全文检索：自动给每个对话记入 transcript.db，供 /search 检索
+        self.transcript = None
+        try:
+            from .session_store import SessionStore
+            self.transcript = SessionStore(Path(data_dir) / "transcript.db")
+        except Exception:
+            self.transcript = None           # 无 FTS5 时优雅降级
+
+    # ---- 会话全文检索 ----
+    def search_sessions(self, query: str, k: int = 10) -> list:
+        if self.transcript is None:
+            return [{"error": "会话检索不可用(缺 FTS5)"}]
+        return self.transcript.search(query, k)
 
     # ---- 定时任务（cron）----
     def cron_add(self, job_id: str, spec: str, payload=None) -> dict:
@@ -89,8 +103,23 @@ class Body:
     def cron_rm(self, job_id: str) -> bool:
         return self.scheduler.remove(job_id)
 
-    def cron_run_due(self, runner=None) -> list:
-        return self.scheduler.run_due(runner=runner)
+    def cron_run_due(self, executor=None) -> list:
+        """执行所有到期任务。executor(job_dict) 缺省用 _default_cron_executor
+        （跑 payload.prompt 经大脑，结果存 self.cron_output）。"""
+        executor = executor or self._default_cron_executor
+        return self.scheduler.run_due(runner=executor)
+
+    def _default_cron_executor(self, job: dict) -> None:
+        job_id = job.get("id", "?")
+        prompt = (job.get("payload") or {}).get("prompt", "")
+        if not prompt:
+            self.cron_output[job_id] = "(该任务无提示词)"
+            return
+        try:
+            r = self.chat("cron:" + job_id, prompt)
+            self.cron_output[job_id] = r["reply"]
+        except Exception as e:
+            self.cron_output[job_id] = f"<cron 执行失败: {e}>"
 
     # ---- 技能（skills/**/SKILL.md）----
     def scan_skills(self) -> list:
@@ -265,6 +294,13 @@ class Body:
             self.budget.record(session, pt, ct)
         except Exception:
             pass
+        # 会话全文检索：把对话记入 transcript（无 FTS5 时 self.transcript 为 None）
+        if self.transcript is not None:
+            try:
+                self.transcript.record(session, message, role="user")
+                self.transcript.record(session, reply, role="assistant")
+            except Exception:
+                pass
         return {
             "reply": reply,
             "elapsed_seconds": round(time.monotonic() - started, 3),

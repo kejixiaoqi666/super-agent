@@ -78,8 +78,8 @@ class SchedulerTest(unittest.TestCase):
         self.s = CronScheduler(Path(self.tmp), clock=self.clock)
         self.ran = []
 
-    def runner(self, job_id):
-        self.ran.append(job_id)
+    def runner(self, job):
+        self.ran.append(job["id"])
 
     def test_add_and_due(self):
         self.s.add("j", "@every 1h")

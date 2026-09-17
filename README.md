@@ -39,7 +39,14 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 /cron-add <id> <规格(@every 30m|五段cron|@ISO)> [提示词]
 /cron-list    列出定时任务
 /cron-rm <id> 删除定时任务
+/cron-run     立即执行所有到期任务(默认跑 payload.prompt 经大脑)
+/search <关键词>   会话全文检索(对话自动记入 transcript.db)
+/delegate <目标>   委派一个子代理任务
 ```
+
+> 对话自动写入 `transcript.db`(FTS5),Cron 到期默认执行其 `prompt` 并经大脑
+> 生成结果(存 `cron_output`)。委派用 `SA_PROVIDER_*` / `OPENAI_*` 环境配置的真实
+> provider,无则回退离线 Echo。
 
 ---
 

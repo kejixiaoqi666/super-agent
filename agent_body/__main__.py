@@ -192,6 +192,35 @@ def main():
                         print("用法: /cron-rm <id>")
                     else:
                         print("已删除" if body.cron_rm(parts[1]) else "不存在")
+                elif message.startswith("/search"):
+                    # /search <query> —— 会话全文检索
+                    q = message[7:].strip()
+                    if not q:
+                        print("用法: /search <关键词>")
+                    else:
+                        hits = body.search_sessions(q)
+                        if not hits:
+                            print("(无命中)")
+                        for h in hits[:10]:
+                            if "error" in h:
+                                print(h["error"])
+                            else:
+                                print(f"[{h['session']}] {h['snip']}")
+                elif message.startswith("/delegate"):
+                    # /delegate <goal...> —— 委派一个子代理任务
+                    goal = message[9:].strip()
+                    if not goal:
+                        print("用法: /delegate <任务目标>")
+                    else:
+                        r = body.delegate(goal)
+                        print("子代理结果:", r.get("summary") or "(空)")
+                elif message == "/cron-run":
+                    # 立即执行所有到期任务
+                    ran = body.cron_run_due()
+                    if not ran:
+                        print("(无到期任务)")
+                    for jid in ran:
+                        print(f"- {jid}: {body.cron_output.get(jid,'')[:200]}")
                 else:
                     print(body.chat(args.session, message)["reply"])
     finally:
