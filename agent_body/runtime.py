@@ -84,6 +84,8 @@ class Body:
         from .skill_compiler import SkillCompiler
         self.compiler = SkillCompiler(self.skills, threshold=3,
                                       persist_path=Path(data_dir) / "experience.json")
+        # 跨会话交接：每进程/会话首轮自动注入简报
+        self._briefed: set = set()
         # 会话全文检索：自动给每个对话记入 transcript.db，供 /search 检索
         self.transcript = None
         try:
@@ -308,6 +310,15 @@ class Body:
             curated = self.curator.curate(brain, self.project, message,
                                           self.tools, skills_store=self.skills)
             prompt = curated.to_prompt()
+            # 跨会话自我重建：每进程每个会话首轮，自动注入上次的交接/简报
+            if session not in self._briefed:
+                self._briefed.add(session)
+                try:
+                    b = self.make_briefing(brain)
+                    if b:
+                        prompt = f"[会话状态]\n{b}\n\n{prompt}"
+                except Exception:
+                    pass
         with self.tracer.span("chat", session=session):
             reply = brain.chat(prompt, person_id=person_id or session)
             brain.save()
@@ -419,6 +430,19 @@ class Body:
                 r = self.delegate(desc)
                 return r.get("summary") or "(空)"
         return execute_plan(make_plan(goal, decompose), runner)
+
+    # ---- 跨会话交接（"/new 也不失忆"）----
+    def handover(self, session: str, summary: str = "") -> dict:
+        """会话结束前调用：把当前状态写进大脑记忆，供下次会话召回。"""
+        from .handover import write_handover
+        brain = self.brain(session)
+        write_handover(brain, summary or f"会话 {session} 结束，状态已存档")
+        return {"stored": True}
+
+    def make_briefing(self, brain):
+        """生成新会话简报：项目上下文 + 相关记忆(含上次交接) + 已有技能。"""
+        from .handover import build_briefing
+        return build_briefing(brain, self.project.describe(), self.skills, k=6)
 
     def _web_search(self, args: dict) -> str:
         from .web import web_search, WebError

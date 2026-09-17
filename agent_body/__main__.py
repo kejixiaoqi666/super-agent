@@ -188,6 +188,13 @@ def main():
                         print(f"进度: {rep['progress']} 失败:{rep['failed']}")
                         for r in rep["results"]:
                             print(f"  [{r['status']}] {r['desc']}")
+                elif message.startswith("/handoff"):
+                    # /handoff [补充说明] —— 会话结束前存档，供下次自动恢复
+                    summary = message[8:].strip()
+                    r = body.handover(args.session, summary)
+                    print("✅ 已存档交接，下次会话自动恢复" if r.get("stored") else "失败")
+                elif message == "/briefing":
+                    print(body.make_briefing(body.brain(args.session)) or "(无简报)")
                 elif message == "/skills":
                     # 发现并列出技能（skills/**/SKILL.md）
                     skills = body.scan_skills()
