@@ -264,6 +264,13 @@ class Body:
                           self._write, "write"),
                 BrainTool("exec", "Run a shell command in workspace (30 second timeout)",
                           {"command": {"type": "string"}}, self._exec, "exec"),
+                BrainTool("web_search", "Search the web (DuckDuckGo, keyless)",
+                          {"query": {"type": "string"},
+                           "limit": {"type": "integer"}}, self._web_search, "read"),
+                BrainTool("web_extract", "Fetch a URL and extract readable text",
+                          {"url": {"type": "string"},
+                           "max_chars": {"type": "integer"}},
+                          self._web_extract, "read"),
             ]
             try:
                 port.attach_tools(tools)
@@ -326,6 +333,31 @@ class Body:
         result = brain.tick()
         brain.save()
         return result
+
+    # ---- Web 工具（真实可用，供大脑调用）----
+    def _web_search(self, args: dict) -> str:
+        from .web import web_search, WebError
+        q = str(args.get("query", "")).strip()
+        if not q:
+            return "web_search 需要 query 参数"
+        try:
+            res = web_search(q, limit=int(args.get("limit", 5)))
+        except WebError as e:
+            return f"web_search 失败: {e}"
+        lines = [f"{i + 1}. {r['title']}\n   {r['url']}"
+                 + (f"\n   {r['snippet'][:120]}" if r.get("snippet") else "")
+                 for i, r in enumerate(res)]
+        return "\n".join(lines)
+
+    def _web_extract(self, args: dict) -> str:
+        from .web import web_extract, WebError
+        url = str(args.get("url", "")).strip()
+        if not url:
+            return "web_extract 需要 url 参数"
+        try:
+            return web_extract(url, max_chars=int(args.get("max_chars", 4000)))
+        except WebError as e:
+            return f"web_extract 失败: {e}"
 
     # ---- AgentLoop 接入：任务驱动自主执行 ----
     def run_task(self, goal, session="task", owner="local",
