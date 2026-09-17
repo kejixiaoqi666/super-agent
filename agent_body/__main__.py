@@ -55,6 +55,8 @@ def _vault_cmd(body, arg: str, master_password: str = ""):
 
 def main():
     parser = argparse.ArgumentParser(description="AgentWorkbench body with SuperBrain 2.0")
+    parser.add_argument("--version", action="version",
+                        version="super-agent 0.3.0")
     parser.add_argument("--kernel", type=Path, default=Path(__file__).resolve().parents[2] / "superbrain-2.0" / "python")
     parser.add_argument("--data", default=".body-data")
     parser.add_argument("--workspace", default=".")

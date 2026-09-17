@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import time
@@ -21,19 +22,43 @@ from typing import Dict, List, Optional
 from ..safety import call_with_retry
 from ..retry import RetryBudget, RetryBudgetExhausted
 
-# 危险命令模式（触发需批准 / 拦截）
-DANGEROUS_PATTERNS: List[str] = [
-    "rm -rf /", "rm -fr /", "shutdown", "reboot", "mkfs", ":(){",
-    "DROP TABLE", "DROP DATABASE", "git push --force", "git push -f",
-    "curl.*|.*sh", "sudo ", "chmod -R 777 /", "> /dev/sda",
+# 危险命令模式（触发需批准 / 拦截）。用「正则 + 归一化」匹配，
+# 避免子串匹配被大小写/多空格/转义绕过。
+# 每个元素: (标签, 编译正则)
+DANGEROUS_PATTERNS: List[tuple] = [
+    ("删根", re.compile(r"rm\s+(-[a-zA-Z]*[fr][a-zA-Z]*\s+)+/")),
+    ("删根", re.compile(r"rm\s+-rf\s+(/|~/)")),
+    ("清盘", re.compile(r"\b(mkfs|fdisk)\b")),
+    ("关机重启", re.compile(r"\b(shutdown|reboot|poweroff|halt)\b")),
+    ("fork炸弹", re.compile(r":\(\)\{")),
+    ("删库", re.compile(r"\b(drop\s+(table|database))\b")),
+    ("强推", re.compile(r"git\s+push\s+(-f|--force)\b")),
+    ("管道装shell", re.compile(r"(curl|wget)[^|;]*\|[^;]*\b(sh|bash|zsh)\b")),
+    ("sudo", re.compile(r"\bsudo\s+")),
+    ("递归改权根", re.compile(r"chmod\s+-R\s+777\s+/")),
+    ("写块设备", re.compile(r">\s*/dev/")),
+    ("改所有文件属主", re.compile(r"chown\s+-R\s+\S+\s+/")),
+    ("dd 覆盖磁盘", re.compile(r"\bdd\b.*(of=|>)\s*/dev/")),
+    ("dd 覆盖磁盘", re.compile(r"\bdd\b.*if=/dev/")),
 ]
 
 
+def _normalize(cmd: str) -> str:
+    """归一化：合并空白、统一引号，用于绕过检测的匹配。"""
+    s = cmd.strip()
+    s = s.replace("\\ ", " ").replace("\\\t", "\t")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
 def _is_dangerous(cmd: str) -> Optional[str]:
-    cmd_n = cmd.replace(" ", " ").strip()
-    for pat in DANGEROUS_PATTERNS:
-        if pat in cmd_n:
-            return pat
+    """检查命令是否危险。命中返回标签，否则 None。归一化后匹配，堵绕过。"""
+    norm = _normalize(cmd)
+    norm_lower = norm.lower()
+    for label, pat in DANGEROUS_PATTERNS:
+        # 先对归一化(保留大小写)匹配，再对转小写版本匹配（覆盖大小写绕过）
+        if pat.search(norm) or pat.search(norm_lower):
+            return label
     return None
 
 
@@ -84,11 +109,47 @@ class Sandbox:
         start = time.time()
 
         def go():
-            r = subprocess.run(cmd, shell=True, cwd=str(workdir),
-                               capture_output=True, text=True, timeout=timeout)
-            if r.returncode != 0:
-                raise CommandError(cmd, r.returncode, r.stderr or r.stdout)
-            return r
+            # Popen + select 带超时流式读：既保内存(截断)又保超时(不阻塞死)
+            import select as _select
+            proc = subprocess.Popen(
+                cmd, shell=True, cwd=str(workdir),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1)
+            out_parts: List[str] = []
+            total = 0
+            cap = 100_000  # 最多保留 ~100KB，防大输出吃内存
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    proc.terminate()
+                    raise CommandError(cmd, -9, "命令执行超时")
+                if proc.poll() is not None and proc.stdout is not None:
+                    # 进程结束，读走剩余输出
+                    rest = proc.stdout.read()
+                    if rest:
+                        out_parts.append(rest)
+                        total += len(rest)
+                    break
+                if proc.stdout is not None:
+                    r, _, _ = _select.select([proc.stdout], [], [], min(remaining, 0.1))
+                    if r:
+                        chunk = proc.stdout.readline()
+                        if not chunk:
+                            continue
+                        out_parts.append(chunk)
+                        total += len(chunk)
+                        if total > cap:  # 超上限截断丢弃，防无界累积
+                            out_parts = out_parts[-10:]
+            full = "".join(out_parts)
+            if proc.returncode != 0:
+                raise CommandError(cmd, proc.returncode, full)
+            return _Result(proc.returncode, full)
+
+        class _Result:
+            def __init__(self, code, stdout):
+                self.returncode = code
+                self.stdout = stdout
 
         try:
             if budget is not None:
