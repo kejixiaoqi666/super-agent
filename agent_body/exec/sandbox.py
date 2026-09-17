@@ -87,17 +87,17 @@ class Sandbox:
                 r = result
             else:
                 r = go()
+            cleaned_now = not keep
             return {
                 "ok": True, "code": r.returncode,
                 "output": (r.stdout or "")[:4000],
-                "workdir": str(workdir), "cleaned": False,
+                "workdir": str(workdir), "cleaned": cleaned_now,
                 "elapsed": round(time.time() - start, 3),
             }
         finally:
             if not keep:
                 shutil.rmtree(workdir, ignore_errors=True)
                 self._active.pop(task_id, None)
-            # 返回 cleaned 需要包裹
 
     def get_workdir(self, task_id: str) -> Optional[Path]:
         return self._active.get(task_id)

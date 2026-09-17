@@ -15,6 +15,8 @@ from .storage import Storage
 from .assets import AssetStore
 from .images import ImageStore
 from .vault import Vault
+from .struct import ensure as _ensure_schema
+from .mcp import MCPClient as _MCPClient
 
 
 class BodyPolicy:
@@ -68,17 +70,35 @@ class Body:
     def storage_report(self) -> dict:
         return self.storage.size_report()
 
+    def mcp_client(self, name: str, command: str, args=None, cwd=None):
+        """连接一个外部 MCP 服务器（stdio），返回已握手客户端。"""
+        client = _MCPClient(command, args or [], cwd=cwd, name=name)
+        client.connect()
+        return client
+
     def _path(self, path):
         target = (self.workspace / path).resolve()
         if self.policy.mode != "unrestricted" and not target.is_relative_to(self.workspace):
             raise PermissionError("path is outside the configured workspace")
         return target
 
+    _READ_SCHEMA = {"type": "object", "required": ["path"],
+                    "properties": {"path": {"type": "string"}}, "additionalProperties": False}
+    _WRITE_SCHEMA = {"type": "object", "required": ["path", "content"],
+                     "properties": {"path": {"type": "string"},
+                                    "content": {"type": "string"}},
+                     "additionalProperties": False}
+    _EXEC_SCHEMA = {"type": "object", "required": ["command"],
+                    "properties": {"command": {"type": "string"}}, "additionalProperties": False}
+
     def _read(self, path):
+        _ensure_schema({"path": path}, self._READ_SCHEMA, "read_file 入参")
         with self._path(path).open(encoding="utf-8") as stream:
             return stream.read(16000)
 
     def _write(self, path, content):
+        _ensure_schema({"path": path, "content": content}, self._WRITE_SCHEMA,
+                       "write_file 入参")
         if self.policy.mode == "read-only":
             raise PermissionError("read-only mode")
         target = self._path(path)
@@ -87,6 +107,7 @@ class Body:
         return {"written": str(target), "bytes": len(content.encode("utf-8"))}
 
     def _exec(self, command):
+        _ensure_schema({"command": command}, self._EXEC_SCHEMA, "exec 入参")
         if self.policy.mode != "unrestricted":
             raise PermissionError("shell requires unrestricted mode")
         # Output goes to a file so a noisy child cannot exhaust host memory.

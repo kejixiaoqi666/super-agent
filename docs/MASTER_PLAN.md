@@ -60,8 +60,11 @@
 | 资产文件夹（skills/MCP/截图分类） | agent_body/assets.py | ✅ |
 | 图片系统（统一存放+PNG压缩入库） | agent_body/images.py | ✅ |
 | 密码本（加密+可解密+分级+防误伤） | agent_body/vault.py | ✅ |
+| MCP 协议（客户端+服务器，stdio） | agent_body/mcp/ | ✅ |
+| 结构化输出（JSON Schema 校验） | agent_body/struct.py | ✅ |
+| 流式输出（TG 打字效果+生成器） | agent_body/stream.py | ✅ |
 
-**总测试数：80 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：109 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 

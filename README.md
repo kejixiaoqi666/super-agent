@@ -19,6 +19,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | P3 客户端 | Rust 跨平台启动器（对接身体层 `sa`） | `client/` |
 | P4 资产与存储 | 五区存储布局 / 资产分类挂载 / 图片统一存放+PNG压缩入库 / 保留时长回收 | `storage.py` `assets.py` `images.py` |
 | P5 密码本 | 加密存储 / 主密码派生(不落盘) / 凭据分级 / 支付级防误伤 | `vault.py` |
+| 成熟补齐 | MCP 协议(客户端+服务器) / 结构化输出校验 / 流式输出(TG打字) / CI测试门禁 | `mcp/` `struct.py` `stream.py` `.github/workflows/test.yml` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 

@@ -59,8 +59,16 @@ def serve(body):
                 if len(text) > 16000:
                     raise ValueError("message too long")
                 reply = body.chat("telegram:" + str(chat["id"]), text, str(sender))["reply"]
-                for start in range(0, len(reply), 1800):
-                    api("sendMessage", chat_id=chat["id"], text=reply[start:start + 1800])
+                # 流式输出：打字效果（先发空消息，再 editMessageText 逐步追加）
+                from .stream import stream_telegram
+                stream_telegram(
+                    reply,
+                    send=lambda t: api("sendMessage", chat_id=chat["id"],
+                                       text=t)["message_id"],
+                    edit=lambda mid, t: api("editMessageText",
+                                            chat_id=chat["id"], message_id=mid,
+                                            text=t),
+                    min_delta=300)
             except Exception:
                 logging.warning("Telegram turn failed; update will not be replayed automatically")
                 try:
