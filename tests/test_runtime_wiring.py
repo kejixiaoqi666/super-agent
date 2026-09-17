@@ -110,6 +110,12 @@ class RuntimeWiringTest(unittest.TestCase):
         finally:
             body.close()
 
+    def test_close_releases_resources(self):
+        body = self._make_body()
+        body.close()
+        # transcript 连接已关闭并置空（防文件句柄泄漏）
+        self.assertIsNone(body.transcript)
+
 
 if __name__ == "__main__":
     unittest.main()

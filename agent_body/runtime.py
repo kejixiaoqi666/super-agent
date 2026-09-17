@@ -547,6 +547,12 @@ class Body:
             finally:
                 brain.close()
         self.brains.clear()
+        if self.transcript is not None:
+            try:
+                self.transcript.close()
+            except Exception:
+                pass
+            self.transcript = None
         self.closed = True
         if errors:
             raise errors[0]
