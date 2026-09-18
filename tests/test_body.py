@@ -25,14 +25,10 @@ class BodyTests(unittest.TestCase):
         from agent_body.telegram import serve
         calls = []
         polls = []
-        class FakeBrain:
-            def chat_stream(self, text):
-                calls.append(("stream", text))
-                yield ("text", "ok")
         class FakeBody:
-            def brain(self, session):
-                calls.append(("brain", session))
-                return FakeBrain()
+            def chat(self, session, text, person):
+                calls.append(("chat", session, text, person))
+                return {"reply": "ok"}
         def response(request, timeout):
             payload = json.loads(request.data)
             method = request.full_url.rsplit("/", 1)[-1]
@@ -46,21 +42,22 @@ class BodyTests(unittest.TestCase):
                     {"update_id": 3, "message": {"from": {"id": 7}, "chat": {"id": 7, "type": "private"}, "text": "allowed"}},
                 ]
             elif method == "sendMessage":
-                result = {"message_id": 1}   # 需返回 message_id 供流式 edit
+                result = {"message_id": 1}
             else:
                 result = {}
             return io.BytesIO(json.dumps({"ok": True, "result": result}).encode())
         with tempfile.TemporaryDirectory() as temp:
             body = FakeBody()
             body.data_dir = Path(temp)
-            with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "fake", "TELEGRAM_ALLOWED_USERS": "7"}), patch("urllib.request.urlopen", side_effect=response):
+            with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "fake", "TELEGRAM_ALLOWED_USERS": "7"}), \
+                 patch("urllib.request.urlopen", side_effect=response), \
+                 patch("agent_body.telegram._get_router", return_value=None):
                 with self.assertRaises(KeyboardInterrupt):
                     serve(body)
-            # 只处理了白名单7的私聊"allowed"，且走流式(brain.chat_stream)
-            self.assertIn(("brain", "telegram:7"), calls)
-            self.assertIn(("stream", "allowed"), calls)
-            # 拒绝的(id9, group)不触发 brain
-            self.assertFalse(any(c[0] == "stream" and c[1] != "allowed" for c in calls))
+            # 只处理白名单7的私聊"allowed"，且走到完整 body.chat(工具能力)
+            self.assertIn(("chat", "telegram:7", "allowed", "7"), calls)
+            # 拒绝的(id9, group)不触发 body.chat
+            self.assertFalse(any(c[0] == "chat" and c[2] != "allowed" for c in calls))
             self.assertEqual(polls, [0, 4])
             self.assertEqual(json.loads((Path(temp) / "telegram-offset.json").read_text()), 4)
 

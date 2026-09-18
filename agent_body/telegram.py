@@ -184,14 +184,6 @@ def serve(body):
                 api("sendMessage", chat_id=chat["id"], text=quick)
                 continue
 
-            # ---- ②.5 本机特权请求(读硬件/读本机/执行命令) → 硬拒绝, 不依赖模型 ----
-            from .router import privileged_local_request
-            if privileged_local_request(text):
-                api("sendMessage", chat_id=chat["id"],
-                    text="我没有执行本机命令的能力(无 shell/exec)。读取本机硬件/文件/进程是特权操作，"
-                         "请交由 Hermes 在门禁下处理。")
-                continue
-
             # ---- ③ 大模型路由：输入先调大模型快速判断简单/复杂 ----
             from .router import Router, needs_live_data, live_answer
             from superbrain2.core.llm import from_env as _env_llm
@@ -221,30 +213,22 @@ def serve(body):
                     continue
             # 需过超脑/判不了 → 交给超脑完整认知管线(真流式)
 
-            # ---- ③ 普通对话：真·流式回复（首个 token 秒显，同 Hermes 打字效果）----
+            # ---- ③ 需过超脑 → 完整认知管线(可靠工具执行, 真能力) ----
             try:
-                brain = body.brain(session)
-                mid = api("sendMessage", chat_id=chat["id"], text="⏳")["message_id"]
-                acc = ""
-                for kind, data in brain.chat_stream(text):
-                    if kind == "text":
-                        acc += data
-                        api("editMessageText", chat_id=chat["id"],
-                            message_id=mid, text=acc)
-                    elif kind == "error":
-                        acc += f"\n[流式错误] {data}"
-                        api("editMessageText", chat_id=chat["id"],
-                            message_id=mid, text=acc)
-                        break
-                # 超长分片兜底（Telegram 单消息 4096 上限）
-                if len(acc) > 4000:
+                mid = api("sendMessage", chat_id=chat["id"], text="⏳ 处理中…")["message_id"]
+                r = body.chat(session, text, str(sender))
+                reply = (r.get("reply") or "").strip()
+                _trace(f"body.chat reply_len={len(reply)}")
+                if len(reply) > 4000:
                     try:
                         api("deleteMessage", chat_id=chat["id"], message_id=mid)
                     except Exception:
                         pass
-                    for i in range(0, len(acc), 4000):
-                        api("sendMessage", chat_id=chat["id"],
-                            text=acc[i:i + 4000])
+                    for i in range(0, len(reply), 4000):
+                        api("sendMessage", chat_id=chat["id"], text=reply[i:i + 4000])
+                else:
+                    api("editMessageText", chat_id=chat["id"], message_id=mid,
+                        text=reply or "（无回复）")
             except Exception:
                 logging.warning("Telegram turn failed", exc_info=True)
                 try:
