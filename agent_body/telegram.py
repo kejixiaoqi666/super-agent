@@ -148,7 +148,14 @@ def serve(body):
                 api("sendMessage", chat_id=chat["id"], text=reply)
                 continue
 
-            # ---- ② 普通对话：真·流式回复（首个 token 秒显，同 Hermes 打字效果）----
+            # ---- ② 轻量快通道：简单消息不经过大脑，纯规则秒回 ----
+            from .fastpath import fast_reply
+            quick = fast_reply(text)
+            if quick is not None:
+                api("sendMessage", chat_id=chat["id"], text=quick)
+                continue
+
+            # ---- ③ 普通对话：真·流式回复（首个 token 秒显，同 Hermes 打字效果）----
             try:
                 brain = body.brain(session)
                 mid = api("sendMessage", chat_id=chat["id"], text="⏳")["message_id"]
