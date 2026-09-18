@@ -73,7 +73,7 @@
 | 阶段 | 交付 | 验收/资源指标 |
 |---|---|---|
 | ① 执行 daemon | worker池+队列+多运行时+错误分类+清理 ✅ | 实测: 空闲24MB(含解释器基线), 1000任务4.65s=215/s, 峰值27.5MB, 零残留 |
-| ② Autopilot-browser | Driver接口 + CDP 后端(点赞/填表/点击) | describe 拿 DOM 布局; act 点击; 无截图 |
+| ② Autopilot-browser | Driver抽象+调度+CDP后端(点赞/填表/点击) ✅(抽象/后端已交付; 真实浏览器E2E待装playwright) | Driver单测6项过; 浏览器后端代码完整惰性; E2E待装~150MB chromium |
 | ③ Autopilot-desktop+android | 桌面 AX 后端 + 安卓 UIAutomator 后端 | 控件树驱动; 跨平台 |
 | ④ 多agent并发执行 | 执行 daemon 对接委派治理(复用 governor) | N 任务分发到 worker agents, 预算/隔离/汇总 |
 
@@ -82,4 +82,5 @@
 - 并发基准：1000 个轻任务(echo/计算) → 记录吞吐与峰值内存
 - 错误注入：超时/语法错/依赖缺 → 断言返回结构化错误分类 + 日志
 - 自动操作：真实浏览器开页 → describe 拿布局 → act 点赞 → 断言成功(非截图)
+  [待验证] 需装 playwright chromium(~150MB)。安装命令见 docs/EXECUTION.md。当前 Driver 抽象/后端已单测通过，未在真实浏览器上跑点击。
 - 全程真实跑通，不用 mock 冒充

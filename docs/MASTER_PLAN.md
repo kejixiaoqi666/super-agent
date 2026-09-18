@@ -82,8 +82,9 @@
 | 每轮真实输入记账（last/max_input, 区分累计成本vs本轮思考量, over_compressed触发） | agent_body/budget.py | ✅ 2026-09 |
 | 执行 daemon（有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限+沙箱清理, 高并发省资源） | agent_body/exec/daemon.py | ✅ 2026-09 |
 | Body 批量执行 run_scripts（懒加载executor, 保序并发, close回收） | agent_body/runtime.py | ✅ 2026-09 |
+| Autopilot 自动操作（Driver抽象 describe/act/文本定位 + Browser后端 Playwright/CDP挖DOM, 惰性加载; 真实浏览器E2E待装playwright） | agent_body/autopilot/ | ✅抽象+后端 2026-09 |
 
-**总测试数：343 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：349 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 
