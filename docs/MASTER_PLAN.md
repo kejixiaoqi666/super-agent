@@ -88,9 +88,9 @@
 | 主权开放 阶段③（自进化思考: evolution/ observer观察→proposer思考提案→ledger状态机(未approved不得apply) →approval批准闸门; Body.run_scripts失败自动入error观察带诊断） | agent_body/evolution/ | ✅ 2026-09 |
 | 主权开放 阶段④（升级治理: upgrade_queue 需求文档存档→排队→门禁approve→测试→并入merge, 不可跳过, 存底代码文档） | sovereign/upgrade_queue.py | ✅ 2026-09 |
 | 主权开放 阶段⑥（信任模式: TrustMode guided/sovereign 切换, 持久化; 只改AI自主体验, 内核只读+底层批准硬约束不随mode变） | sovereign/trust.py | ✅ 2026-09 |
-| 主权开放 阶段⑤（层面一开放: 完整上下文/全量工具/思考进化循环接 AI 自主） | — | ⏳ |
+| 主权开放 阶段⑤（层面一开放: Body.ai_sovereign_toolset 能力面暴露给AI, 思考进化循环接AI自主: observe/propose_upper自主apply/propose_base批准/插件/升级/trust） | agent_body/runtime.py | ✅ 2026-09 |
 
-**总测试数：384 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：385 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 

@@ -85,6 +85,33 @@ class EvolutionTest(unittest.TestCase):
             finally:
                 body.close()
 
+    def test_ai_toolset_self_evolution(self):
+        """层面一开放：AI 通过工具面自主进化上层 + 底层需批准。"""
+        from agent_body.runtime import Body
+        with tempfile.TemporaryDirectory() as td:
+            body = Body(Path(td) / "data", Path(td) / "work", mode="unrestricted")
+            try:
+                t = body.ai_sovereign_toolset()
+                # AI 记录观察
+                t["observe"]("pain", "重复手动审批", source="ai")
+                # AI 提上层提案 → 自主 apply 成功（无需批准）
+                p = t["propose_upper"](center="界面", target="面板",
+                                       suggestion="加批量按钮")
+                r = t["apply_proposal"](p["pid"])
+                self.assertTrue(r["ok"])
+                self.assertEqual(r["state"], "applied")
+                # AI 提底层提案 → apply 被拒（需批准）
+                pb = t["propose_base"](center="内核", target="daemon",
+                                       suggestion="改调度")
+                rb = t["apply_proposal"](pb["pid"])
+                self.assertFalse(rb["ok"])
+                self.assertIn("批准", rb["error"])
+                # AI 装插件（上层自由区）
+                t["install_plugin"]("快捷", {"main.py": "def main(): return 1"})
+                self.assertIn("快捷", t["list_plugins"]())
+            finally:
+                body.close()
+
     def test_approve_only_from_pending(self):
         p = self.ev.propose("执行", target="x", suggestion="y")
         self.ev.reject(p["pid"])

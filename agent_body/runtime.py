@@ -514,6 +514,43 @@ class Body:
         """懒加载自进化思考（观察/提案/批准/执行）。"""
         return self.sovereign().evolution
 
+    # ---- 层面一开放：把主权/自进化能力开放成 AI 可调用的工具面 ----
+    def ai_sovereign_toolset(self) -> dict:
+        """AI 可直接调用的「自进化机制」工具面（薄封装，内部全走已测模块）。
+
+        return: {
+            observe(kind, detail, source=''),        # 记录观察(错误/痛点/优化/迭代)
+            propose_upper(center,target,suggestion), # 上层提案(自主进化)
+            apply_proposal(pid),                     # 执行(上层自主/底层需批准)
+            propose_base(center,target,suggestion),  # 底层提案(必须批准)
+            approve/apply                            # 批准/执行
+            submit_upgrade(title,rationale,code_doc),# 底层升级文档存档
+            install_plugin(name,files,...),          # 装插件(上层自由区)
+            check_write(path),                       # 写目标分区检查
+        }
+        """
+        evo = self.evolution()
+        sov = self.sovereign()
+        from .sovereign import Plugin as _Plugin
+        return {
+            "observe": evo.observer.record,
+            "propose_upper": lambda **kw: evo.propose(level="upper", **kw),
+            "propose_base": evo.propose_base,
+            "apply_proposal": evo.apply,
+            "approve": evo.approve,
+            "reject": evo.reject,
+            "pending_proposals": evo.pending,
+            "submit_upgrade": sov.upgrade_queue.submit,
+            "pending_upgrades": sov.upgrade_queue.pending,
+            "install_plugin": lambda name, files, **kw:
+                sov.install_plugin(_Plugin(name=name, files=files, **kw)),
+            "uninstall_plugin": sov.uninstall_plugin,
+            "list_plugins": sov.list_plugins,
+            "check_write": sov.check_write,
+            "trust_mode": sov.trust.get,
+            "set_trust_mode": sov.trust.set,
+        }
+
     def chat_image(self, session: str, image: Union[str, Path, bytes],
                    message: str = "看看这张图", person_id=None) -> dict:
         """带图对话：读图 → base64 data URL → 交给大脑多模态识别（模型识图，非本地OCR）。"""

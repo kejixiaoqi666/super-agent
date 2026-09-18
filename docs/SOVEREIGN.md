@@ -74,7 +74,7 @@
 | ② 自我修改(限定插件) | sovereign/self_mod：增插件/改技能/扩展能力，全留痕可回滚 ✅ |
 | ③ 自进化思考 | evolution/：observer观察记录 → proposer思考提案 → ledger库 → approval批准闸门（批准才执行） ✅ |
 | ④ 升级治理 | sovereign/upgrade_queue：需求文档存档→排队→门禁→测试→并入 ✅ |
-| ⑤ 层面一开放 | 完整上下文/全量工具/思考进化循环接到 AI 自主 |
+| ⑤ 层面一开放 | 完整上下文/全量工具/思考进化循环接 AI 自主 ✅（Body.ai_sovereign_toolset 能力面暴露: observe/propose_upper自主/propose_base批准/apply/插件/升级/trust） |
 | ⑥ 信任模式 | guided vs sovereign 切换（只改 AI 自主体验, 硬约束不随 mode 变） ✅ |
 
 ## 10. 验证纪律
