@@ -28,7 +28,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | 成熟补齐6 | **自动续接**(长上下文→按当轮真实输入占窗口比例自动开新会话, 精确锚点写向量记忆无缝衔接) / **每轮真实输入记账**(区分累计成本vs本轮思考量) / **分级预警**(✅ok/⚠️warn/🔴critical, 预动在阈值前提醒) | `continuity.py` `budget.py` |
 | 成熟补齐7 | **执行 daemon**(高并发省资源: 有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限setrlimit+沙箱自动清理, 1000任务215/s峰值仅27MB零残留) / **Body.run_scripts批量执行** | `exec/daemon.py` `exec/sandbox.py` |
 | 成熟补齐8 | **Autopilot 自动操作**(统一Driver抽象: describe拿布局/act注入/文本定位, 能拿布局不截图; Browser后端=Playwright/CDP挖DOM; 惰性加载后端, 不用零占用) / **分层预警已含** | `autopilot/` |
-| 成熟补齐9 | **主权开放架构**(阶段①②③: 开放插件注册中心=随装随卸即净/坏插件隔离/动态加载执行 + 内核只读门=内核不可撼动,写被拒提示走升级队列 + 自我修改SelfMod=限定插件层,全留痕可回滚 + 自进化思考=观察/思考提案/批准才执行,Body.run_scripts失败自动入观察) | `sovereign/` `evolution/` |
+| 成熟补齐9 | **主权开放架构**(阶段①-④: 开放插件注册中心=随装随卸即净/坏插件隔离/动态加载执行 + 内核只读门=内核不可撼动,写被拒提示走升级队列 + 自我修改SelfMod=限定插件层,全留痕可回滚 + 自进化思考=观察/提案/批准才执行,上层自主+底层批准 + 升级治理Queue=文档存档→门禁→测试→并入,不可跳过) | `sovereign/` `evolution/` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 

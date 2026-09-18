@@ -30,6 +30,9 @@ class Sovereign:
         # 自进化思考（观察/提案/批准/执行）
         from ..evolution import Evolution as _Evo
         self.evolution = _Evo(self.data_dir)
+        # 升级治理队（底层进化正规通道：文档存档→门禁→测试→并入）
+        from .upgrade_queue import UpgradeQueue as _UQ
+        self.upgrade_queue = _UQ(self.data_dir)
 
     # ---- 插件自由区 ----
     def install_plugin(self, plugin: Plugin) -> dict:

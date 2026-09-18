@@ -180,5 +180,63 @@ class SelfModTest(unittest.TestCase):
         self.assertEqual(self.s.run_plugin("keep")["result"], "keep")
 
 
+class UpgradeQueueTest(unittest.TestCase):
+    """阶段④ 升级治理：文档存档→门禁→测试→并入，不可跳过。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.uq = Sovereign(Path(self.tmp.name) / "data").upgrade_queue
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_submit_persists_doc_and_code_doc(self):
+        u = self.uq.submit(
+            title="执行daemon提速", rationale="批量1000任务可更高效",
+            code_doc="def _execute(): ...", files_impacted=["exec/daemon.py"],
+            risk="medium")
+        self.assertEqual(u["state"], "submitted")
+        self.assertEqual(u["code_doc"], "def _execute(): ...")
+        self.assertEqual(len(self.uq.pending()), 1)     # 排队待门禁
+
+    def test_submit_requires_code_doc(self):
+        with self.assertRaises(ValueError):
+            self.uq.submit(title="x", rationale="y", code_doc="   ")
+
+    def test_cannot_merge_without_gate(self):
+        u = self.uq.submit(title="t", rationale="r", code_doc="cd")
+        merged = []
+        res = self.uq.merge(u["uid"], lambda up: merged.append(up))
+        self.assertFalse(res["ok"])
+        self.assertIn("门禁", res["error"])
+
+    def test_merge_requires_tested(self):
+        u = self.uq.submit(title="t", rationale="r", code_doc="cd")
+        self.uq.approve(u["uid"])
+        # approved 直接 merge（没测试）→ 拒绝
+        res = self.uq.merge(u["uid"], lambda up: None)
+        self.assertFalse(res["ok"])
+        self.assertIn("测试", res["error"])
+
+    def test_full_flow_submit_approve_test_merge(self):
+        u = self.uq.submit(title="t", rationale="r", code_doc="cd")
+        merged = []
+        self.assertTrue(self.uq.approve(u["uid"])["ok"])
+        self.assertTrue(self.uq.mark_tested(u["uid"])["ok"])
+        res = self.uq.merge(u["uid"], lambda up: merged.append(up))
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["state"], "merged")
+        self.assertEqual(len(merged), 1)     # 真实并入被调用
+        # 已并入不可再 merge
+        res2 = self.uq.merge(u["uid"], lambda up: None)
+        self.assertFalse(res2["ok"])
+
+    def test_reject_then_no_merge(self):
+        u = self.uq.submit(title="t", rationale="r", code_doc="cd")
+        self.uq.reject(u["uid"])
+        res = self.uq.merge(u["uid"], lambda up: None)
+        self.assertFalse(res["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

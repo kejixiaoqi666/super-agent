@@ -86,9 +86,11 @@
 | 主权开放 阶段①（开放插件注册中心: 随装随卸即净/坏插件隔离不影响内核/动态加载执行 + 内核只读门: kernel区写被拒提示走升级队列, plugin/free放行） | agent_body/sovereign/ | ✅ 2026-09 |
 | 主权开放 阶段②（自我修改限定插件层: SelfMod 增/改/卸插件+写受管文件, 全留痕trail, restore_last_good回滚, 内核写经gate拒绝带升级提示） | sovereign/self_mod.py | ✅ 2026-09 |
 | 主权开放 阶段③（自进化思考: evolution/ observer观察→proposer思考提案→ledger状态机(未approved不得apply) →approval批准闸门; Body.run_scripts失败自动入error观察带诊断） | agent_body/evolution/ | ✅ 2026-09 |
-| 主权开放 阶段④（升级治理: upgrade_queue 需求文档存档→排队→门禁→测试→并入） | sovereign/upgrade_queue.py | ⏳ |
+| 主权开放 阶段④（升级治理: upgrade_queue 需求文档存档→排队→门禁approve→测试→并入merge, 不可跳过, 存底代码文档） | sovereign/upgrade_queue.py | ✅ 2026-09 |
+| 主权开放 阶段⑤（层面一开放: 完整上下文/全量工具/思考进化循环接 AI 自主） | — | ⏳ |
+| 主权开放 阶段⑥（信任模式: guided vs sovereign 切换） | — | ⏳ |
 
-**总测试数：373 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：380 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 
