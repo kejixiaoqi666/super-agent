@@ -83,8 +83,11 @@
 | 执行 daemon（有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限+沙箱清理, 高并发省资源） | agent_body/exec/daemon.py | ✅ 2026-09 |
 | Body 批量执行 run_scripts（懒加载executor, 保序并发, close回收） | agent_body/runtime.py | ✅ 2026-09 |
 | Autopilot 自动操作（Driver抽象 describe/act/文本定位 + Browser后端 Playwright/CDP挖DOM, 惰性加载; 真实浏览器E2E待装playwright） | agent_body/autopilot/ | ✅抽象+后端 2026-09 |
+| 主权开放 阶段①（开放插件注册中心: 随装随卸即净/坏插件隔离不影响内核/动态加载执行 + 内核只读门: kernel区写被拒提示走升级队列, plugin/free放行） | agent_body/sovereign/ | ✅ 2026-09 |
+| 主权开放 阶段②（自我修改限定插件层, 留痕可回滚） | sovereign/self_mod.py | ⏳ |
+| 主权开放 阶段③（自进化思考: observer/proposer/ledger/approval, 批准才执行） | evolution/ | ⏳ |
 
-**总测试数：349 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：359 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 
