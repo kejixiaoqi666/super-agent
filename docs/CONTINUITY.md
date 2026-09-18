@@ -74,4 +74,4 @@ Hermes 把早期对话"压成摘要"——摘要由模型生成，必然有损�
 - [x] 内核单测：FakeLLM usage→`agent.usage()` 贯通且每轮重置
 - [x] 全链 facade：`SuperBrain.usage()` 返回真实 prompt_tokens
 - [x] super-agent：`Body.chat` 用真实 usage 记账（FakePort usage=900 → last_input≥900），无 usage 时回退身体精简 prompt 代理
-- [ ] 语义保持：把一段长文写入 → 压缩后 `recall` 能原样取回关键句子（不靠模型）——需真实内核+真实模型，作为线上验证项
+- [x] 语义保持：把一段长文写入 → 压缩后 `recall` 能原样取回关键句子（不靠模型）——已用真实内核+hashing 库跑通，5/5 事实原样召回；语义回归测试固化在 tests/test_semantic_recall.py
