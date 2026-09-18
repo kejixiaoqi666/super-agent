@@ -126,6 +126,11 @@ class SuperBrainAdapter(BrainPort):
         return self._require_brain().chat(
             message, person_id=person_id or self._session, images=images)
 
+    def chat_stream(self, message, person_id=None, images=None):
+        """真·流式对话（生成器, yield ("text",增量)/("done",全文)/("error",信息)）。"""
+        return self._require_brain().chat_stream(
+            message, person_id=person_id or self._session, images=images)
+
     def usage(self) -> dict:
         """当轮真实 token 用量（内核向量压缩后喂给模型的输入）——供自动续接判断。"""
         try:

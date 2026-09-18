@@ -25,13 +25,18 @@ class BodyTests(unittest.TestCase):
         from agent_body.telegram import serve
         calls = []
         polls = []
+        class FakeBrain:
+            def chat_stream(self, text):
+                calls.append(("stream", text))
+                yield ("text", "ok")
         class FakeBody:
-            def chat(self, session, text, person):
-                calls.append((session, text, person))
-                return {"reply": "done"}
+            def brain(self, session):
+                calls.append(("brain", session))
+                return FakeBrain()
         def response(request, timeout):
             payload = json.loads(request.data)
-            if request.full_url.endswith("getUpdates"):
+            method = request.full_url.rsplit("/", 1)[-1]
+            if method == "getUpdates":
                 polls.append(payload["offset"])
                 if len(polls) > 1:
                     raise KeyboardInterrupt()
@@ -40,6 +45,8 @@ class BodyTests(unittest.TestCase):
                     {"update_id": 2, "message": {"from": {"id": 7}, "chat": {"id": -1, "type": "group"}, "text": "denied"}},
                     {"update_id": 3, "message": {"from": {"id": 7}, "chat": {"id": 7, "type": "private"}, "text": "allowed"}},
                 ]
+            elif method == "sendMessage":
+                result = {"message_id": 1}   # 需返回 message_id 供流式 edit
             else:
                 result = {}
             return io.BytesIO(json.dumps({"ok": True, "result": result}).encode())
@@ -49,7 +56,11 @@ class BodyTests(unittest.TestCase):
             with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "fake", "TELEGRAM_ALLOWED_USERS": "7"}), patch("urllib.request.urlopen", side_effect=response):
                 with self.assertRaises(KeyboardInterrupt):
                     serve(body)
-            self.assertEqual(calls, [("telegram:7", "allowed", "7")])
+            # 只处理了白名单7的私聊"allowed"，且走流式(brain.chat_stream)
+            self.assertIn(("brain", "telegram:7"), calls)
+            self.assertIn(("stream", "allowed"), calls)
+            # 拒绝的(id9, group)不触发 brain
+            self.assertFalse(any(c[0] == "stream" and c[1] != "allowed" for c in calls))
             self.assertEqual(polls, [0, 4])
             self.assertEqual(json.loads((Path(temp) / "telegram-offset.json").read_text()), 4)
 
