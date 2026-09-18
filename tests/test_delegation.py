@@ -180,6 +180,22 @@ class GovernorTest(unittest.TestCase):
         plan = g.govern(4, requested_steps=4)      # 4*4=16>8 → 每任务2步
         self.assertEqual(plan.steps_each, 2)
 
+    def test_parallel_applies_governed_steps_even_with_explicit_max(self):
+        # 回归：调用方显式传 max_steps 也不得绕过 governor 步预算（预算绕过 bug）
+        import unittest.mock as mock
+        from agent_body import delegation as dmod
+        g = DelegationGovernor(total_step_budget=8, per_default_steps=4)
+        captured = {}
+        def fake_delegate(router, goal, context, **kw):
+            captured["max_steps"] = kw.get("max_steps")
+            return {"summary": goal, "steps": 0}
+        router = mock.MagicMock()
+        with mock.patch.object(dmod, "delegate_task", fake_delegate):
+            dmod.parallel_delegate(
+                router, [("g1", "c"), ("g2", "c"), ("g3", "c"), ("g4", "c")],
+                governor=g, max_steps=4)   # 显式传4
+        self.assertEqual(captured["max_steps"], 2)   # 受控步数仍被施加
+
 
 class SessionScopedDispatchTest(unittest.TestCase):
     def setUp(self):

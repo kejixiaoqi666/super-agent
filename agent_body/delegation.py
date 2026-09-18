@@ -257,8 +257,9 @@ def parallel_delegate(router, tasks: List[Union[Tuple[str, str], Dict]],
     if governor is not None:
         plan = governor.govern(len(tasks), requested_concurrent=max_concurrent,
                                requested_steps=kw.get("max_steps"))
-        if "max_steps" not in kw:
-            kw["max_steps"] = plan.steps_each
+        # 预算修正：无论调用方是否显式传 max_steps，都必须施加受控步数
+        # （否则显式传 max_steps 会绕过 governor 的步预算缩减——真实预算绕过 bug）
+        kw["max_steps"] = plan.steps_each
         eff_concurrent = plan.concurrency
     else:
         eff_concurrent = max(1, max_concurrent)
