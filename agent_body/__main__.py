@@ -204,6 +204,17 @@ def main():
                         print(f"     {s['reason']}")
                         if s.get("ready"):
                             print(f"     已预检: {'; '.join(s['ready'])}")
+                elif message == "/continuity":
+                    # /continuity —— 自动续接状态（当轮真实输入占窗口比例）
+                    c = body.continuity_status(args.session)
+                    print(f"会话 {c.get('session')}  窗口 {c.get('window','?')} tokens")
+                    print(f"当轮输入: {c.get('last_input',0):,}  "
+                          f"(峰值 {c.get('max_input',0):,})  "
+                          f"占窗口 {c.get('input_pct',0)*100:.1f}%")
+                    print(f"累计成本: {c.get('cum_cost',0):,}")
+                    flag = "⚠️ 建议自动续接新会话" if c.get("needs_continuity")\
+                        else ("✅ 输入聚焦，暂无需续接")
+                    print(flag)
                 elif message.startswith("/learn"):
                     # /learn <后置命令> —— 记住"做完当前这类任务→用该命令"的习惯
                     cmd = message[6:].strip()

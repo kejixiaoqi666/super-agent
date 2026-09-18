@@ -55,6 +55,11 @@ class Body:
         self.project = ProjectContext(str(data_dir))
         self.curator = Curator()
         self.budget = ContextBudget(str(data_dir))
+        # 自动续接：当轮真实输入占窗口比例达阈值 → 精确锚点写向量记忆 + 后继会话
+        from .continuity import ContinuityManager
+        self.continuity = ContinuityManager(
+            self.budget, context_length=self.budget.context_length,
+            continuity_at=self.budget.continuity_at)
         # Phase 4 存储/资产/图片 + Phase 5 密码本
         self.storage = Storage(data_dir)
         self.assets = AssetStore(self.storage)
@@ -367,11 +372,21 @@ class Body:
             reply = brain.chat(prompt, person_id=person_id or session)
             brain.save()
         # token 计费 + 上下文统计 + 预算记账
+        # input_tokens = 身体构造的真实输入（curated prompt + 简报）——作为"当轮
+        # 思考量"的下限代理；内核返回真实 usage 时替换为精确值。
         try:
             pt = estimate_tokens(prompt)
             ct = estimate_tokens(reply)
             self.stats.record(session, message, reply, model=self.model)
-            self.budget.record(session, pt, ct)
+            self.budget.record(session, pt, ct, input_tokens=pt)
+        except Exception:
+            pass
+        # 自动续接：当轮真实输入占比达阈值 → 写精确锚点 + 给出后继会话
+        continuity = None
+        try:
+            if self.continuity.should_continue(session):
+                continuity = self.continuity.execute(
+                    session, self._continuity_meta(session), brain=brain)
         except Exception:
             pass
         # 会话全文检索：把对话记入 transcript（无 FTS5 时 self.transcript 为 None）
@@ -385,7 +400,34 @@ class Body:
             "reply": reply,
             "elapsed_seconds": round(time.monotonic() - started, 3),
             "dropped_memory": curated.dropped,
+            "continuity": continuity,
         }
+
+    def _continuity_meta(self, session: str) -> dict:
+        """从真实会话状态拼锚点元数据（只取确认事实，绝不编造）。"""
+        meta: dict = {"session": session}
+        if self.last_goal:
+            meta["goal"] = self.last_goal
+        try:
+            pj = self.project.project
+            if pj:
+                meta["project"] = pj
+        except Exception:
+            pass
+        try:
+            pending = self.queue.pending_count()
+            if pending:
+                meta["next"] = f"{pending} 个未完成任务待续跑(/resume)"
+        except Exception:
+            pass
+        return meta
+
+    def continuity_status(self, session: str) -> dict:
+        """当前会话的续接判断详情（供 CLI /continuity）。"""
+        try:
+            return self.continuity.status(session)
+        except Exception:
+            return {"session": session, "needs_continuity": False}
 
     def chat_image(self, session: str, image: Union[str, Path, bytes],
                    message: str = "看看这张图", person_id=None) -> dict:

@@ -89,8 +89,17 @@ class OpenAIProvider(Provider):
             choice = data["choices"][0]["message"]
             content = choice.get("content")
             tool_calls = choice.get("tool_calls") or []
-            return {"provider": self.name, "content": content,
-                    "tool_calls": [dict(t) for t in tool_calls]}
+            out = {"provider": self.name, "content": content,
+                   "tool_calls": [dict(t) for t in tool_calls]}
+            # 抓真实 token 用量（每轮真实输入大小，供预算/自动续接判断）
+            usage = data.get("usage") or {}
+            if isinstance(usage, dict) and usage:
+                out["usage"] = {
+                    "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
+                    "completion_tokens": int(usage.get("completion_tokens", 0) or 0),
+                    "total_tokens": int(usage.get("total_tokens", 0) or 0),
+                }
+            return out
         except Exception as e:  # 缺字段/结构不对
             raise ProviderError(f"{self.name} 响应解析失败: {e}") from None
 

@@ -25,6 +25,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | 成熟补齐3 | **Web搜索/抓取工具**(真实) / **模型无关视觉**(感知哈希/状态色) / **多模态图像输入**(base64识图) / **Git集成** / **生命周期钩子** / **Plan模式** | `web.py` `vision.py` `git.py` `hooks.py` `planner.py` |
 | 成熟补齐4 | **经验自动固化**(重复成功→SKILL.md) / **跨会话自我重建**(/new不失忆) / **预动性**(主动预测并预检用户下一步, /next + 数据驱动习惯学习 /learn) | `skill_compiler.py` `handover.py` `proactive.py` |
 | 成熟补齐5 | **委派资源治理**(并行cap+步预算+批次上限) / **会话权限隔离**(委派子代理默认只读, 写入/执行落session沙箱) | `delegation.py` |
+| 成熟补齐6 | **自动续接**(长上下文→按当轮真实输入占窗口比例自动开新会话, 精确锚点写向量记忆无缝衔接) / **每轮真实输入记账**(区分累计成本vs本轮思考量) | `continuity.py` `budget.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 
@@ -46,6 +47,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 /search <关键词>   会话全文检索(对话自动记入 transcript.db)
 /next       预动性建议(任务完成后主动预测并预检用户下一步)
 /learn <命令>   记住习惯:"做完这类任务→用此命令"(数据驱动预动性)
+/continuity   自动续接状态(当轮真实输入占窗口比例 / 建议新会话)
 /delegate <目标>   委派一个子代理任务
 /看图 <图路径> [提示词]   模型识图(base64直传)
 /git <op> [args]    git status/diff/diffstat/commit/log/push/branch

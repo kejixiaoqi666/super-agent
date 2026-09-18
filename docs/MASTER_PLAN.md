@@ -78,8 +78,10 @@
 | **预动性**（任务完成后主动预测+只读预检用户下一步, /next + 数据驱动习惯学习 /learn） | agent_body/proactive.py | ✅ 2026-09 |
 | 委派资源治理（并行cap+步预算+批次上限, DelegationGovernor） | agent_body/delegation.py | ✅ 2026-09 |
 | 会话权限隔离（委派子代理默认只读, 写入/执行落session沙箱） | agent_body/delegation.py | ✅ 2026-09 |
+| 自动续接（当轮真实输入占窗口比例→精确锚点写向量记忆→后继会话无缝衔接） | agent_body/continuity.py | ✅ 2026-09 |
+| 每轮真实输入记账（last/max_input, 区分累计成本vs本轮思考量, over_compressed触发） | agent_body/budget.py | ✅ 2026-09 |
 
-**总测试数：304 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：315 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 

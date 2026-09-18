@@ -1,9 +1,14 @@
 """上下文预算 Budget —— token 计量 + 超预算信号。
 
-你要的"上下文不能只增不减"：当前架构里多轮会话上下文由大脑内核统一管理
-（身体每次只发单个 prompt，不持有历史列表），所以真正的压缩/归档由内核负责。
-身体侧的 Budget 职责 = 精确记账 + 暴露 over_budget 信号（供前端/后续内核压缩钩子用），
-不做身体层历史裁剪（body 无历史可裁，避免留下死代码假象）。
+你要的"上下文不能只增不减" + "要算每轮真实输入"：
+  - 累计成本（cost）：跨所有消息的 prompt+completion 加总，衡量会话总开销。
+  - **每轮真实输入（input）**：当轮真正喂给模型的 token（向量压缩后），
+    这才是"每次思考的量"，也是自动续接/压缩的触发依据。
+    它可能远小于累计成本——因为我们用向量库精自压缩，上下文长但输入聚焦。
+
+当前架构里多轮会话的组装在 superbrain 内核（系统+状态+向量召回记忆+工具+prompt），
+所以"真实输入"最准的来源是内核 llm.chat 返回的 usage.prompt_tokens；身体在收不到时
+用自己构造的精简 prompt（含简报）做下限代理。
 
 估算策略：中文≈1 token/字，英文≈1 token/4字符（与内核 estimate_tokens 对齐）。
 """
@@ -12,6 +17,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Optional
 
 
 def estimate_tokens(text: str) -> int:
@@ -33,10 +39,17 @@ class ContextBudget:
     """
 
     def __init__(self, data_dir: str | Path, max_tokens: int = 16000,
-                 archive_at: float = 0.8):
-        """max_tokens: 预算上限；archive_at: 达到该比例触发压缩信号（默认80%）。"""
+                 archive_at: float = 0.8,
+                 context_length: int = 256000,
+                 continuity_at: float = 0.5):
+        """max_tokens: 预算上限；archive_at: 达到该比例触发压缩信号。
+        context_length: 模型上下文窗口（触发自动续接的分母）；
+        continuity_at: 当轮真实输入占窗口比例达到它 → over_compressed（自动续接）。
+        """
         self.max_tokens = max_tokens
         self.archive_at = archive_at
+        self.context_length = max(1, context_length)
+        self.continuity_at = max(0.1, min(0.95, continuity_at))
         self.path = Path(data_dir) / "budget.json"
         self.usage = self._load()
 
@@ -56,24 +69,66 @@ class ContextBudget:
         tmp.replace(self.path)
 
     # ---- 会话 token 记账 ----
-    def record(self, session: str, prompt_tokens: int, completion_tokens: int) -> None:
+    def record(self, session: str, prompt_tokens: int, completion_tokens: int,
+               input_tokens: Optional[int] = None) -> None:
+        """记账一轮。
+
+        prompt/completion 计入累计成本（cost）；input_tokens 是该轮**真实输入**
+        （向量压缩后喂给模型的量），作为"本轮思考量"的高水位更新。
+        input_tokens 缺省时用 prompt_tokens 兜底（身体构造的精简 prompt）。
+        """
         s = self.usage["sessions"].setdefault(
-            session, {"prompt": 0, "completion": 0, "messages": 0})
+            session, {"prompt": 0, "completion": 0, "messages": 0,
+                      "last_input": 0, "max_input": 0})
         s["prompt"] += prompt_tokens
         s["completion"] += completion_tokens
         s["messages"] += 1
+        cur_input = int(input_tokens) if input_tokens is not None \
+            else int(prompt_tokens)
+        s["last_input"] = cur_input
+        if cur_input > s.get("max_input", 0):
+            s["max_input"] = cur_input
         s["last_at"] = time.time()
         self._save()
 
     def session_usage(self, session: str) -> dict:
         return self.usage["sessions"].get(
-            session, {"prompt": 0, "completion": 0, "messages": 0})
+            session, {"prompt": 0, "completion": 0, "messages": 0,
+                      "last_input": 0, "max_input": 0})
 
     def over_budget(self, session: str) -> bool:
-        """当前会话是否已达压缩触发线（信号，供调用方决定是否压缩/归档）。"""
+        """当前会话是否已达压缩触发线（累计成本信号，供调用方决定是否归档）。"""
         u = self.session_usage(session)
         total = u["prompt"] + u["completion"]
         return total >= self.max_tokens * self.archive_at
+
+    def over_compressed(self, session: str) -> bool:
+        """当轮**真实输入**是否已占模型窗口太多 → 该自动续接新会话。
+
+        依据是向量压缩后的每轮输入（input），而非累计成本——
+        上下文长但输入聚焦时不会误触发。连续触发防抖：需至少见过一轮输入。
+        """
+        u = self.session_usage(session)
+        last = u.get("last_input", 0)
+        if last <= 0:
+            return False
+        return last >= self.context_length * self.continuity_at
+
+    def continuity_status(self, session: str) -> dict:
+        """该会话的续接判断详情（供 CLI /continuity 展示）。"""
+        u = self.session_usage(session)
+        window = self.context_length
+        last = u.get("last_input", 0)
+        return {
+            "session": session,
+            "window": window,
+            "continuity_at": self.continuity_at,
+            "last_input": last,
+            "max_input": u.get("max_input", 0),
+            "cum_cost": u.get("prompt", 0) + u.get("completion", 0),
+            "input_pct": round(last / window, 4) if window else 0.0,
+            "needs_continuity": self.over_compressed(session),
+        }
 
     # ---- 归档（保留：移动当前 usage 到历史，供前端查看历史用量） ----
     def archive(self, session: str) -> dict:
