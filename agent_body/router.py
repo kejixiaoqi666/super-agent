@@ -65,6 +65,21 @@ def needs_live_data(text: str) -> bool:
     return bool(_LIVE_HINTS.search(text))
 
 
+# ---- 本机特权请求检测：读本机硬件/文件/执行命令 → 硬拒绝(不依赖模型) ----
+_LOCAL_TOPIC = re.compile(
+    r"(硬件|本机|服务器信息|内存|磁盘|CPU|显卡|网卡|进程|文件系统|系统信息|主机名|序列号|"
+    r"分区|内核版本|uname|lsblk|lspci|dmidecode|hostnamectl)")
+_LOCAL_VERB = re.compile(r"(查|看|读|运行|执行|信息|多少|什么|用|列)")
+
+
+def privileged_local_request(text: str) -> bool:
+    """是否请求读取本机硬件/文件/执行命令(特权操作)——机器人无此能力, 硬拒绝。"""
+    t = text.strip()
+    if re.match(r"^\s*(lscpu|free|df|lsblk|lspci|dmidecode|hostnamectl|uname|ps|top)\b", t):
+        return True
+    return bool(_LOCAL_TOPIC.search(text)) and bool(_LOCAL_VERB.search(text))
+
+
 def live_answer(llm, text: str, max_tokens: int = 240) -> str:
     """联网搜索实时数据 → 大模型简洁总结成答案(带来源)。失败返回空串(回退)。"""
     try:

@@ -2,7 +2,7 @@
 
 import unittest
 
-from agent_body.router import Router, needs_live_data
+from agent_body.router import Router, needs_live_data, privileged_local_request
 
 
 class _FakeLLM:
@@ -54,6 +54,17 @@ class LiveDataTest(unittest.TestCase):
     def test_non_live_data_not_detected(self):
         for q in ("帮我写一首诗", "你好", "什么是递归", "解释一下量子纠缠"):
             self.assertFalse(needs_live_data(q), q)
+
+
+class PrivilegedLocalTest(unittest.TestCase):
+    def test_privileged_detected(self):
+        for q in ("帮我查一下这台服务器的硬件信息", "看看本机内存和磁盘",
+                  "运行 lscpu", "读取服务器 CPU 信息", "查一下主机名"):
+            self.assertTrue(privileged_local_request(q), q)
+
+    def test_plain_not_privileged(self):
+        for q in ("你好", "BTC现在多少钱", "帮我写段代码", "讲个笑话"):
+            self.assertFalse(privileged_local_request(q), q)
 
 
 if __name__ == "__main__":

@@ -184,6 +184,14 @@ def serve(body):
                 api("sendMessage", chat_id=chat["id"], text=quick)
                 continue
 
+            # ---- ②.5 本机特权请求(读硬件/读本机/执行命令) → 硬拒绝, 不依赖模型 ----
+            from .router import privileged_local_request
+            if privileged_local_request(text):
+                api("sendMessage", chat_id=chat["id"],
+                    text="我没有执行本机命令的能力(无 shell/exec)。读取本机硬件/文件/进程是特权操作，"
+                         "请交由 Hermes 在门禁下处理。")
+                continue
+
             # ---- ③ 大模型路由：输入先调大模型快速判断简单/复杂 ----
             from .router import Router, needs_live_data, live_answer
             from superbrain2.core.llm import from_env as _env_llm
