@@ -1,68 +1,136 @@
 #!/usr/bin/env bash
-# Super-Agent 一键安装（Linux / macOS）
-# 用法: curl -fsSL https://github.com/kejixiaoqi666/super-agent/releases/latest/download/install.sh | bash
+# =============================================================================
+# Super-Agent 完全体一键安装 (super-agent + superbrain-2.0 · systemd 自启)
+# 用法（从 GitHub 一键安装）:
+#   curl -fsSL https://raw.githubusercontent.com/kejixiaoqi666/super-agent/master/install.sh | bash
+# 可选环境变量:
+#   SA_BASE=$HOME/super-agent    安装根目录(默认)
+#   SA_MODE=workspace            权限模式: read-only|workspace|unrestricted
+#   SA_TELEGRAM=1                装完启动 Telegram 常驻服务(默认)
+#   SA_ENABLE_SYSTEMD=1          注册 systemd 自启(默认)
+#   插件 / embedding 模型是可选、单独挨个装: 见脚本末尾说明。
+# 幂等: 重复执行会复用已装的仓库与 venv, 只会更新代码/依赖/服务。
+# =============================================================================
 set -euo pipefail
 
-REPO="kejixiaoqi666/super-agent"
-VERSION="${VERSION:-latest}"
-PIP="${PIP:-python3 -m pip}"
+# ---- 可配置 ----
+BASE="${SA_BASE:-$HOME/super-agent}"
+MODE="${SA_MODE:-workspace}"
+APP="$BASE/app"            # super-agent 仓库
+BRAIN="$BASE/brain"        # superbrain-2.0 仓库
+VENV="$BASE/.venv"
+DATA="$BASE/data"
+WS="$BASE/workspace"
+REPO_SA="https://github.com/kejixiaoqi666/super-agent.git"
+REPO_BRAIN="https://github.com/kejixiaoqi666/superbrain-2.0.git"
 
-echo "==> Super-Agent 安装向导"
-echo "    版本: ${VERSION}"
+c() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
+ok() { printf '\033[1;32m    ✓\033[0m %s\n' "$*"; }
+err() { printf '\033[1;31m!! %s\033[0m\n' "$*" >&2; }
 
-# 0) 检测 OS/arch
-OS="$(uname -s)"
-ARCH="$(uname -m)"
-echo "==> 检测到: ${OS} / ${ARCH}"
+# ---- 前置检查 ----
+command -v git >/dev/null || { err "需要 git"; exit 1; }
+PY=$(command -v python3 || true)
+[ -n "$PY" ] || { err "需要 python3"; exit 1; }
+"$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' \
+  || { err "需要 Python >= 3.10 (当前: $("$PY" -V 2>&1))"; exit 1; }
 
-# 1) 检测 python3
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "!! 需要 python3 (>=3.10)，未找到。请先安装 Python，再重跑本脚本。" >&2
-  exit 1
+mkdir -p "$BASE" "$DATA" "$WS"
+cd "$BASE"
+
+# ---- 1. 拉取/更新源码 (幂等) ----
+c "拉取 super-agent"
+if [ -d "$APP/.git" ]; then git -C "$APP" pull --ff-only --quiet; else git clone --quiet "$REPO_SA" "$APP"; fi
+ok "super-agent -> $APP"
+c "拉取 superbrain-2.0"
+if [ -d "$BRAIN/.git" ]; then git -C "$BRAIN" pull --ff-only --quiet; else git clone --quiet "$REPO_BRAIN" "$BRAIN"; fi
+ok "superbrain-2.0 -> $BRAIN"
+
+# ---- 2. 创建虚拟环境 ----
+c "创建虚拟环境 $VENV"
+if [ ! -x "$VENV/bin/python" ]; then
+  "$PY" -m venv "$VENV"
 fi
-PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-echo "==> python3: ${PYVER}"
+"$VENV/bin/pip" install --quiet --upgrade pip
 
-# 2) 建独立 venv（避免污染系统 Python）
-VENV_DIR="${SUPER_AGENT_VENV:-$HOME/.super-agent/venv}"
-if [ ! -x "$VENV_DIR/bin/python" ]; then
-  echo "==> 创建虚拟环境: ${VENV_DIR}"
-  python3 -m venv "$VENV_DIR"
-fi
-VENV_PY="$VENV_DIR/bin/python"
-VENV_PIP="$VENV_DIR/bin/pip"
+# ---- 3. 安装 Python 依赖 ----
+c "安装依赖 (rich/Pillow/cryptography/numpy + super-agent)"
+"$VENV/bin/pip" install --quiet \
+  -r "$APP/requirements.txt" numpy
+"$VENV/bin/pip" install --quiet -e "$APP"
+ok "依赖安装完成"
 
-# 3) 安装 super-agent（从 GitHub Release 拉最新 wheel，回退到 PyPI）
-echo "==> 安装 super-agent ..."
-if [ "$VERSION" = "latest" ]; then
-  "$VENV_PIP" install --upgrade "super-agent" || \
-    "$VENV_PIP" install --upgrade "git+https://github.com/${REPO}.git"
-else
-  "$VENV_PIP" install --upgrade "super-agent==${VERSION}" || \
-    "$VENV_PIP" install --upgrade "git+https://github.com/${REPO}.git@${VERSION}"
-fi
-
-# 4) 生成 .env（如缺）
-ENV_FILE="$HOME/.super-agent/.env"
-mkdir -p "$HOME/.super-agent"
-if [ ! -f "$ENV_FILE" ]; then
-  echo "==> 生成 .env: ${ENV_FILE}（请编辑填入你的 API / Bot Token）"
-  cat > "$ENV_FILE" <<'EOF'
-# Super-Agent 环境变量（0600 权限）
-# LLM API key（大脑内核用）
-LLM_API_KEY=
-# Telegram Bot Token（可选，启用 TG 轮询）
-TELEGRAM_BOT_TOKEN=
+# ---- 4. 环境配置 (.env) ----
+c "配置 .env"
+ENVF="$DATA/.env"
+mkdir -p "$DATA"
+if [ ! -f "$ENVF" ]; then
+  cat > "$ENVF" <<EOF
+# Telegram 机器人 (https://t.me/BotFather 创建, 填 token)
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+# 允许使用的 Telegram 用户名(逗号分隔, 白名单)
+TELEGRAM_ALLOWED_USERS=${TELEGRAM_ALLOWED_USERS:-}
+# 密码本主密码(可选; 用于派生加密密钥, 不落盘到代码)
+VAULT_MASTER=${VAULT_MASTER:-}
 EOF
-  chmod 600 "$ENV_FILE"
+  ok "已生成 $ENVF (请编辑填入 TELEGRAM_BOT_TOKEN)"
+else
+  ok "已存在 $ENVF (跳过)"
 fi
 
-# 5) 提示完成
-echo
-echo "==> 安装完成！"
-echo "    CLI 入口: $VENV_DIR/bin/sa"
-echo "    或激活环境后使用: sa"
-echo "    配置文件: ${ENV_FILE}"
-echo
-echo "建议把下面这行加进 ~/.bashrc 方便使用:"
-echo "  export PATH=\"\$HOME/.super-agent/venv/bin:\$PATH\""
+# ---- 5. 常驻服务 + systemd 自启 ----
+run_telegram=0
+[ "${SA_TELEGRAM:-1}" = "1" ] && run_telegram=1
+en_sysd=0
+[ "${SA_ENABLE_SYSTEMD:-1}" = "1" ] && en_sysd=1
+if [ "$en_sysd" = "1" ]; then
+  c "注册 systemd 用户服务 super-agent.service"
+  UNIT="$HOME/.config/systemd/user/super-agent.service"
+  mkdir -p "$(dirname "$UNIT")"
+  cat > "$UNIT" <<EOF
+[Unit]
+Description=Super-Agent Body + SuperBrain 2.0
+After=network.target
+[Service]
+Type=simple
+WorkingDirectory=$BASE
+EnvironmentFile=$DATA/.env
+ExecStart=$VENV/bin/sa --telegram --kernel $BRAIN/python --data $DATA --workspace $WS --mode $MODE
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=default.target
+EOF
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  systemctl --user enable super-agent.service >/dev/null 2>&1 || true
+  if [ "$run_telegram" = "1" ]; then
+    systemctl --user restart super-agent.service >/dev/null 2>&1 || true
+    loginctl enable-linger "$USER" >/dev/null 2>&1 || true   # 免登录自启
+  fi
+  ok "systemd 服务已启用 (无需登录也会自启, 已开 linger)"
+fi
+
+# ---- 6. 验证完全体 ----
+c "验证完全体"
+V=$("$VENV/bin/sa" --version 2>/dev/null | tail -1 || echo "?")
+ok "版本: $V"
+"$VENV/bin/python" -c "import agent_body; import numpy" && ok "super-agent + numpy 可导入"
+K="$BRAIN/python/superbrain2"
+[ -d "$K" ] && "$VENV/bin/python" -c "import sys; sys.path.insert(0, '$BRAIN/python'); import superbrain2" && ok "superbrain2 内核可导入" \
+  || { err "superbrain2 导入检查未过 (可后续重跑脚本修复)"; }
+
+cat <<'EOF'
+
+════════════════════════════════════════════════════
+✅ 完全体已装好。接着:
+   1. 编辑  $DATA/.env  填入 Telegram token
+   2. 启动  systemctl --user start super-agent
+   3. 看日志 systemctl --user status super-agent
+   4. 交互  $VENV/bin/sa   (或 .venv/bin/sa --telegram)
+
+可选(单独挨个装, 不阻塞完全体):
+   · embedding 真语义模型: $VENV/bin/pip install -e "$BRAIN[embedding]"  # onnxruntime+tokenizers
+   · 插件: 在交互里 /plugins 查看, 或用 Body 插件注册中心随装随卸
+   · 密码本: 设 VAULT_MASTER 后可用 vault 加密凭据
+════════════════════════════════════════════════════
+EOF

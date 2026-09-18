@@ -64,6 +64,21 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 
 ---
 
+## ⚡ 完全体一键安装（Linux / macOS）
+
+一次装好 **super-agent（身体）+ superbrain-2.0（大脑）+ 依赖 + systemd 开机自启**，跑完即是完全体：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kejixiaoqi666/super-agent/master/install.sh | bash
+```
+
+- 自动从 GitHub 拉两仓库 → 建 venv 装依赖 → 生成 `.env`（填 Telegram token）→ 注册 `systemd --user` 服务并开机自启（开 linger，无需登录）。
+- 幂等：重复执行只更新代码/依赖/服务，不破坏已有数据。
+- **插件 / embedding 真语义模型是可选**，单独挨个装（不阻塞完全体），详见 [install.sh](install.sh) 末尾说明。
+- 常用环境变量：`SA_BASE` 安装目录(默认 `~/super-agent`)、`SA_MODE` 权限模式(read-only/workspace/unrestricted)、`SA_TELEGRAM=0` 跳过常驻、`SA_ENABLE_SYSTEMD=0` 跳过自启。
+
+---
+
 ## 发布与安装
 
 打 `v*` 标签即自动触发 [GitHub Actions 发布工作流](.github/workflows/release.yml)，构建多平台 Python wheel，创建 GitHub Release 并附带一键安装脚本。
