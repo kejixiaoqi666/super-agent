@@ -169,5 +169,45 @@ class HabitLearnerTest(unittest.TestCase):
         self.assertEqual(_type_key("部署 节点!!服务"), _type_key("部署节点服务"))
 
 
+class InspectArtifactAndWiringTest(unittest.TestCase):
+    """回归：inspect_artifact 引号+验存在；_refresh_next 把 last_task 接线给规则。"""
+
+    def test_inspect_artifact_quotes_and_checks_existence(self):
+        import tempfile
+        from pathlib import Path
+        from agent_body.proactive import rule_inspect_artifact
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "report 巴 1.txt"
+            f.write_text("data", encoding="utf-8")
+            s = rule_inspect_artifact(
+                {"last_task": {"goal": "生成报告并写文件", "produced": str(f)}})
+            assert s is not None
+            self.assertIn(str(f), s.command)          # 完整路径在命令中(已被引号包裹)
+            self.assertIn("'", s.command)             # 确认走了 shlex.quote
+            self.assertTrue(any("已确认在磁盘" in r for r in s.ready))
+            # 不存在的产物：不编造"已落盘"
+            s2 = rule_inspect_artifact({"last_task": {
+                "goal": "生成报告并写文件",
+                "produced": str(Path(td) / "nope.txt")}})
+            assert s2 is not None
+            self.assertTrue(any("路径已知" in r for r in s2.ready))
+
+    def test_body_refresh_next_wires_last_task_for_habit(self):
+        # 回归：run_task 传顶层 goal，_refresh_next 必须组装 last_task 才能让习惯规则生效
+        import tempfile
+        from pathlib import Path
+        from agent_body.runtime import Body
+        with tempfile.TemporaryDirectory() as td:
+            body = Body(Path(td) / "data", Path(td) / "work", mode="unrestricted")
+            try:
+                body.proactive.record_habit("重启服务成功", "systemctl status")
+                body.proactive.record_habit("重启服务成功", "systemctl status")
+                body._refresh_next({"goal": "重启服务成功", "status": "done"})
+                self.assertIsNotNone(body._next_hint)
+                self.assertIn("systemctl", body._next_hint["command"])
+            finally:
+                body.close()
+
+
 if __name__ == "__main__":
     unittest.main()

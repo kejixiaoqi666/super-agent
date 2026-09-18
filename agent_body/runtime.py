@@ -808,13 +808,19 @@ class Body:
 
     # ---- 预动性 ----
     def _refresh_next(self, context: dict) -> None:
-        """刷新高置信"下一步"建议（不刷 watermark 的 peek + 只留最高置信）。"""
+        """刷新高置信"下一步"建议（不刷 watermark 的 peek + 只留最高置信）。
+        注意：习惯/产物规则读 last_task.goal，须从 context 组装 last_task 字典，
+        否则顶层 goal 传不进规则（接线 bug，已修）。
+        """
         c = dict(context)
         c["workspace"] = str(self.workspace)
         c["pending_count"] = self.queue.pending_count()
+        # 组装 last_task：供 rule_learned_habit / rule_inspect_artifact 读取
+        c["last_task"] = {"goal": c.get("goal", ""),
+                          "produced": c.get("produced") or c.get("result", "")}
         try:
-            self._next_hint = self.proactive.peek(c)[0].to_dict() \
-                if self.proactive.peek(c) else None
+            hints = self.proactive.peek(c)          # 只 peek 一次（避免重复跑规则）
+            self._next_hint = hints[0].to_dict() if hints else None
         except Exception:
             self._next_hint = None
 

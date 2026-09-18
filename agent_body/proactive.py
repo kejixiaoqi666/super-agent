@@ -113,18 +113,21 @@ def rule_run_tests(ctx: dict) -> Optional[Suggestion]:
 
 def rule_inspect_artifact(ctx: dict) -> Optional[Suggestion]:
     """刚完成任务生成了产物 → 建议检查产物是否符合预期。"""
+    import shlex
     lt = ctx.get("last_task") or {}
     goal = str(lt.get("goal") or "")
     produced = str(lt.get("produced") or "")
     if not produced or not any(k in goal for k in ("写", "生成", "创建", "导出", "报告", "文档")):
         return None
+    exists = Path(produced).exists()   # 实际检查，不编造"已落盘"
     return Suggestion(
         title=f"检查刚生成的产物: {produced}",
-        command=f"cat {produced}",
+        command=f"cat {shlex.quote(produced)}",   # 路径引号防空格/注入
         confidence=0.55,
         reason=f"任务「{goal[:30]}」刚完成并产出文件，下一步通常是核对产物。",
         source="inspect_artifact",
-        ready=["产物文件已落盘", "可一步打开查看"],
+        ready=[("产物已确认在磁盘" if exists else "产物路径已知，可打开查看"),
+               "可一步打开查看"],
     )
 
 
