@@ -9,6 +9,8 @@ import os
 import time
 import urllib.request
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
 from . import config as cfg
 
 # 惰性全局路由器(用 body 所用模型做轻量简单/复杂判断)
@@ -23,6 +25,19 @@ def _get_router():
 def _set_router(r):
     global _router
     _router = r
+
+
+_TRACE_PATH = "/root/.supera-data/route_trace.log"
+
+
+def _trace(msg: str):
+    """可靠诊断：追加到文件(不依赖日志级别)。"""
+    try:
+        import datetime
+        with open(_TRACE_PATH, "a") as f:
+            f.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} {msg}\n")
+    except Exception:
+        pass
 
 
 _HELP = """可用命令（快速操作，都是调 Body 能力面）:
@@ -172,22 +187,27 @@ def serve(body):
             # ---- ③ 大模型路由：输入先调大模型快速判断简单/复杂 ----
             from .router import Router, needs_live_data, live_answer
             from superbrain2.core.llm import from_env as _env_llm
+            _trace("pre-router")
             if _get_router() is None:
                 try:
                     _set_router(Router(_env_llm()))
-                except Exception:
-                    pass
+                    _trace("router built OK")
+                except Exception as _e:
+                    _trace(f"router build FAIL: {type(_e).__name__}: {_e}")
             rt = _get_router()
+            _trace(f"rt is None? {rt is None} | needs_live_data={needs_live_data(text)}")
 
             # ---- ③.5 实时数据问题 → 联网搜索简洁作答(不再打太极) ----
             if rt is not None and needs_live_data(text):
                 _la = live_answer(rt._llm, text)
+                _trace(f"live_data ans_len={len(_la)}")
                 if _la:
                     api("sendMessage", chat_id=chat["id"], text=_la)
                     continue
 
             if rt is not None:
                 _route, _ans = rt.classify(text)
+                _trace(f"classify -> {_route} ans_len={len(_ans)}")
                 if _route == "direct":      # 不需过超脑 → 直接简短回答
                     api("sendMessage", chat_id=chat["id"], text=_ans)
                     continue
