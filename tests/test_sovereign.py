@@ -112,5 +112,73 @@ class KernelGateTest(unittest.TestCase):
         self.assertEqual(res["zone"], "free")
 
 
+class SelfModTest(unittest.TestCase):
+    """阶段② 自我修改：限定插件层 + 留痕 + 可回滚 + 内核拒绝。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name) / "data"
+        self.s = Sovereign(self.data)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_add_edit_remove_plugin_trailed(self):
+        sm = self.s.self_mod
+        r = sm.add_plugin("算数", {"main.py": "def main(): return 1"})
+        self.assertTrue(r["ok"])
+        self.assertEqual(self.s.run_plugin("算数")["result"], 1)
+        # 编辑
+        r = sm.edit_plugin("算数", {"main.py": "def main(): return 99"})
+        self.assertTrue(r["ok"])
+        self.assertEqual(self.s.run_plugin("算数")["result"], 99)
+        self.assertEqual(len(sm.trail()), 2)
+
+    def test_kernel_write_rejected_not_silent(self):
+        sm = self.s.self_mod
+        # 尝试写内核（本项目 agent_body/budget.py 相对 cwd）
+        res = sm.write_managed("agent_body/budget.py", "HACK")
+        self.assertFalse(res["allowed"])
+        self.assertIn("升级", res["reason"])     # 提示走升级队列
+        self.assertEqual(len(sm.trail()), 0)      # 被拒不留痕
+
+    def test_write_managed_then_rollback(self):
+        sm = self.s.self_mod
+        target = Path(self.tmp.name) / "scratch" / "idea.txt"   # free 区可写
+        sm.write_managed(str(target), "v1")
+        self.assertEqual(target.read_text(), "v1")
+        sm.write_managed(str(target), "v2")
+        self.assertEqual(target.read_text(), "v2")
+        res = sm.restore_last_good(1)
+        self.assertEqual(res["undone"], 1)
+        self.assertEqual(target.read_text(), "v1")   # 回滚到 v1
+
+    def test_data_dir_core_write_rejected(self):
+        # 数据目录下、非插件 → 核心数据只读，写被拒并提示升级
+        sm = self.s.self_mod
+        res = sm.write_managed(str(self.data / "notes" / "idea.txt"), "x")
+        self.assertFalse(res["allowed"])
+        self.assertEqual(res["zone"], "kernel")
+
+    def test_rollback_plugin_edit(self):
+        sm = self.s.self_mod
+        sm.add_plugin("p", {"main.py": "def main(): return 'A'"})
+        sm.edit_plugin("p", {"main.py": "def main(): return 'B'"})
+        self.assertEqual(self.s.run_plugin("p")["result"], "B")
+        sm.restore_last_good(1)   # 撤销 edit → 回 A
+        self.assertEqual(self.s.run_plugin("p")["result"], "A")
+        sm.restore_last_good(1)   # 撤销 add → 插件没了
+        self.assertNotIn("p", self.s.list_plugins())
+
+    def test_remove_plugin_rollback_restores(self):
+        sm = self.s.self_mod
+        sm.add_plugin("keep", {"main.py": "def main(): return 'keep'"})
+        sm.remove_plugin("keep")
+        self.assertNotIn("keep", self.s.list_plugins())
+        sm.restore_last_good(1)
+        self.assertIn("keep", self.s.list_plugins())
+        self.assertEqual(self.s.run_plugin("keep")["result"], "keep")
+
+
 if __name__ == "__main__":
     unittest.main()

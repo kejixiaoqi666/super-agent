@@ -16,15 +16,17 @@ from typing import List
 
 from .gate import KernelReadOnlyGate
 from .plugins import Plugin, PluginRegistry
+from .self_mod import SelfMod
 
 
 class Sovereign:
-    """主权开放统一入口：插件自由区 + 内核只读门。"""
+    """主权开放统一入口：插件自由区 + 内核只读门 + 自我修改。"""
 
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
         self.plugins = PluginRegistry(self.data_dir)
         self.gate = KernelReadOnlyGate(self.data_dir)
+        self.self_mod = SelfMod(self.data_dir, gate=self.gate)
 
     # ---- 插件自由区 ----
     def install_plugin(self, plugin: Plugin) -> dict:
