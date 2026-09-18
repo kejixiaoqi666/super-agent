@@ -127,6 +127,78 @@ class ExecutorDaemonTest(unittest.TestCase):
         self.assertEqual(leftover, [], f"残留目录: {leftover}")
 
 
+class PersistentPoolTest(unittest.TestCase):
+    """常驻 worker 池：吞吐优化 + 默认零进程 + 超时补位。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name) / "data"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_default_off_no_pool(self):
+        # 默认 persistent_size=0 → 不 spawn worker，零进程零占用
+        d = ExecutorDaemon(self.data, persistent_size=0)
+        try:
+            self.assertIsNone(d._persistent)
+        finally:
+            d.shutdown()
+
+    def test_persistent_executes_result(self):
+        d = ExecutorDaemon(self.data, persistent_size=2)
+        try:
+            r = d.execute(Task(runtime="python", command="_result=6*7",
+                               persistent=True))
+            self.assertTrue(r.ok)
+            self.assertIn("42", r.output)     # worker 返回 repr(_result)
+        finally:
+            d.shutdown()
+
+    def test_persistent_python_error_reported(self):
+        d = ExecutorDaemon(self.data, persistent_size=1)
+        try:
+            r = d.execute(Task(runtime="python", command="1/0",
+                               persistent=True))
+            self.assertFalse(r.ok)
+            self.assertIn("ZeroDivision", r.error_msg)
+        finally:
+            d.shutdown()
+
+    def test_persistent_timeout_replaces_worker(self):
+        d = ExecutorDaemon(self.data, persistent_size=1)
+        try:
+            # 卡死任务 → 超时 kill 补位
+            r = d.execute(Task(runtime="python",
+                               command="import time; time.sleep(30)",
+                               persistent=True, timeout_s=0.3))
+            self.assertFalse(r.ok)
+            self.assertIn("timeout", r.error_msg)
+            # 补位后仍可正常执行
+            r2 = d.execute(Task(runtime="python", command="_result='alive'",
+                                persistent=True))
+            self.assertTrue(r2.ok)
+            self.assertIn("alive", r2.output)
+        finally:
+            d.shutdown()
+
+    def test_persistent_throughput(self):
+        # 吞吐：常驻池应远快于进程级 spawn(~207/s)
+        import time as _t
+        n = 300
+        d = ExecutorDaemon(self.data, persistent_size=4)
+        try:
+            t0 = _t.time()
+            rs = d.run_many([Task(runtime="python", command="_result=2*2",
+                                  persistent=True) for _ in range(n)])
+            dt = _t.time() - t0
+            self.assertTrue(all(x.ok for x in rs))
+            throughput = n / dt
+            self.assertGreater(throughput, 500, f"吞吐不足: {throughput:.0f}/s")
+        finally:
+            d.shutdown()
+
+
 class BodyRunScriptsTest(unittest.TestCase):
     """Body.run_scripts 批量并发执行 + 保持顺序 + 关闭回收 executor。"""
 

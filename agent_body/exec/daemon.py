@@ -68,6 +68,7 @@ class Task:
     mem_limit_mb: Optional[int] = None
     keep: bool = False      # 保留工作目录与产物（默认不保留，清洁）
     retries: int = 0        # 幂等重试次数
+    persistent: bool = False  # 走常驻解释器 worker 池(海量 python 脚本提速, 需 executor persistent_size>0)
 
     def __post_init__(self):
         if self.runtime not in RUNTIMES:
@@ -104,12 +105,18 @@ class ExecutorDaemon:
     """
 
     def __init__(self, data_dir: str | Path, pool_size: int = 4,
-                 default_timeout: float = 60.0):
+                 default_timeout: float = 60.0, persistent_size: int = 0):
         self.sandbox = Sandbox(data_dir)
         self.pool_size = max(1, pool_size)
         self.default_timeout = default_timeout
         self._pool = ThreadPoolExecutor(max_workers=self.pool_size,
                                         thread_name_prefix="exec")
+        # 常驻解释器 worker 池（默认 0=关闭，不 spawn；海量 python 脚本才开启）
+        self.persistent_size = max(0, persistent_size)
+        self._persistent = None
+        if persistent_size > 0:
+            from .persistent import PersistentPool
+            self._persistent = PersistentPool("python", size=persistent_size)
         self._stats = {"submitted": 0, "done": 0, "error": 0, "total_ms": 0}
         self._closed = False
 
@@ -119,6 +126,10 @@ class ExecutorDaemon:
 
     def _execute(self, task: Task) -> ExecResult:
         start = time.time()
+        # 常驻 worker 快速路径：python + persistent + 池已启用 → 免解释器冷启动
+        if task.persistent and task.runtime == "python" \
+                and self._persistent is not None:
+            return self._exec_persistent(task, start)
         cmd = self._render(task)
         try:
             r = self.sandbox.run(
@@ -136,6 +147,29 @@ class ExecutorDaemon:
                 code=e.code, output=e.output[:4000],
                 elapsed_ms=int((time.time() - start) * 1000),
                 error_class=ecls, error_msg=str(e), attempts=1)
+        except Exception as e:
+            return ExecResult(
+                task_id=task.id, status="error", code=-1, output="",
+                elapsed_ms=int((time.time() - start) * 1000),
+                error_class="unknown", error_msg=f"{type(e).__name__}: {e}",
+                attempts=1)
+
+    def _exec_persistent(self, task: Task, start: float) -> ExecResult:
+        """常驻 worker 执行：免解释器冷启动，超时 kill 补位。"""
+        assert self._persistent is not None
+        try:
+            r = self._persistent.execute(task.command, timeout_s=task.timeout_s)
+            ms = int((time.time() - start) * 1000)
+            if r.get("ok"):
+                return ExecResult(
+                    task_id=task.id, status="done", code=0,
+                    output=str(r.get("result", ""))[:4000],
+                    elapsed_ms=ms, error_class=None, error_msg=None, attempts=1)
+            return ExecResult(
+                task_id=task.id, status="error", code=-1,
+                output=str(r.get("error", ""))[:4000],
+                elapsed_ms=ms, error_class="runtime",
+                error_msg=str(r.get("error", "")), attempts=1)
         except Exception as e:
             return ExecResult(
                 task_id=task.id, status="error", code=-1, output="",
@@ -166,6 +200,8 @@ class ExecutorDaemon:
     def shutdown(self) -> None:
         if not self._closed:
             self._pool.shutdown(wait=True)
+            if self._persistent is not None:
+                self._persistent.close()
             self._closed = True
 
     def stats(self) -> dict:

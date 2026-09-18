@@ -82,6 +82,7 @@
 | 每轮真实输入记账（last/max_input, 区分累计成本vs本轮思考量, over_compressed触发） | agent_body/budget.py | ✅ 2026-09 |
 | 执行 daemon（有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限+沙箱清理, 高并发省资源） | agent_body/exec/daemon.py | ✅ 2026-09 |
 | Body 批量执行 run_scripts（懒加载executor, 保序并发, close回收） | agent_body/runtime.py | ✅ 2026-09 |
+| 常驻解释器 worker 池（persistent.py: 免每任务冷启动, stdin/stdout JSON行协议, 每worker独立锁防交错, 超时kill补位; 默认关零进程; 2000任务8w=4651/s≈22.5×进程级） | agent_body/exec/persistent.py | ✅ 2026-09 |
 | Autopilot 自动操作（Driver抽象 describe/act/文本定位 + Browser后端 Playwright/CDP挖DOM, 惰性加载; 真实浏览器E2E待装playwright） | agent_body/autopilot/ | ✅抽象+后端 2026-09 |
 | 主权开放 阶段①（开放插件注册中心: 随装随卸即净/坏插件隔离不影响内核/动态加载执行 + 内核只读门: kernel区写被拒提示走升级队列, plugin/free放行） | agent_body/sovereign/ | ✅ 2026-09 |
 | 主权开放 阶段②（自我修改限定插件层: SelfMod 增/改/卸插件+写受管文件, 全留痕trail, restore_last_good回滚, 内核写经gate拒绝带升级提示） | sovereign/self_mod.py | ✅ 2026-09 |
@@ -91,7 +92,7 @@
 | 主权开放 阶段⑤（层面一开放: Body.ai_sovereign_toolset 能力面暴露给AI, 思考进化循环接AI自主: observe/propose_upper自主apply/propose_base批准/插件/升级/trust） | agent_body/runtime.py | ✅ 2026-09 |
 | AI 自运维+自测（selftest跑pytest找缺陷入自进化; ops_health健康汇总; ops_diagnose产出待办; 进AI工具面） | agent_body/runtime.py | ✅ 2026-09 |
 
-**总测试数：388 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：393 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 
