@@ -57,6 +57,20 @@ class BudgetInputTest(unittest.TestCase):
     def test_no_input_seen_not_triggered(self):
         self.assertFalse(self.b.over_compressed("s"))   # 无记录
 
+    def test_graded_levels(self):
+        # 窗口1000, 触发线500(0.5), 预警线400(0.5*0.8)
+        self.b.record("s", 10, 10, input_tokens=300)   # 30% → ok
+        self.assertEqual(self.b.continuity_status("s")["level"], "ok")
+        self.b.record("s", 10, 10, input_tokens=430)   # 43% → warn(预动预警, 未到触发线)
+        st = self.b.continuity_status("s")
+        self.assertEqual(st["level"], "warn")
+        self.assertTrue(st["warning"])
+        self.assertFalse(st["needs_continuity"])
+        self.b.record("s", 10, 10, input_tokens=600)   # 60% → critical
+        st = self.b.continuity_status("s")
+        self.assertEqual(st["level"], "critical")
+        self.assertTrue(st["needs_continuity"])
+
 
 class ContinuityTest(unittest.TestCase):
     def setUp(self):
@@ -111,14 +125,25 @@ class ContinuityTest(unittest.TestCase):
         self.assertEqual(res["successor_session"], "s#2")
 
     def test_cooldown_prevents_duplicate_fire(self):
-        # 触发并 execute 后，冷却期内不重复触发（防刷屏写重复锚点）
+        # 写入成功触发后，冷却期内不重复触发（防刷屏写重复锚点）
+        class _B:
+            def remember(self, content, tags=None, importance=0.0, tier=""):
+                return "node"
         self.budget.record("s", 10, 10, input_tokens=900)
         self.assertTrue(self.cm.should_continue("s"))
-        self.cm.execute("s", {"goal": "部署"})           # 记录触发时刻
-        self.assertFalse(self.cm.should_continue("s"))   # 冷却期内静默
+        self.cm.execute("s", {"goal": "部署"}, brain=_B())   # 写入成功→记录触发
+        self.assertFalse(self.cm.should_continue("s"))       # 冷却期内静默
         # 手动清冷却 → 可再次触发
         self.cm._last_fired["s"] = 0.0
         self.assertTrue(self.cm.should_continue("s"))
+
+    def test_failed_write_does_not_set_cooldown(self):
+        # 写入失败（如无 brain）不进入冷却，不压制后续重试
+        self.budget.record("s", 10, 10, input_tokens=900)
+        res = self.cm.execute("s", {"goal": "部署"})
+        self.assertFalse(res["anchors_written"])
+        self.assertTrue(self.cm.should_continue("s"))   # 未进冷却 → 仍可触发
+        self.assertNotIn("s", self.cm._last_fired)
 
 
 class BodyUsageWiringTest(unittest.TestCase):
@@ -179,6 +204,70 @@ class BodyUsageWiringTest(unittest.TestCase):
                 self.assertGreater(last_input, 0)   # 用身体构造的精简 prompt 兜底
             finally:
                 body.close()
+
+
+class ContinuityAdviceTest(unittest.TestCase):
+    """continuity_advice：critical 才落盘写锚点；warn/ok 轻量咨询不建 brain。"""
+
+    def _body(self, input_tokens):
+        from agent_body.runtime import Body
+
+        class FakePort:
+            def __init__(self):
+                self.written = []
+            def chat(self, msg, person_id=None): return "ok"
+            def usage(self):
+                return {"prompt_tokens": input_tokens, "completion_tokens": 0,
+                        "total_tokens": input_tokens, "calls": 1}
+            def recall(self, q, k=10): return []
+            def remember(self, c, scope="", tier="", **kw):
+                self.written.append(c)
+                return "id"
+            def save(self): pass
+            def close(self): pass
+
+        tmp = tempfile.TemporaryDirectory()
+        per = Path(tmp.name) / "data"
+        body = Body(per, Path(tmp.name) / "work", mode="unrestricted")
+        body.brains["s"] = FakePort()
+        body.project.set_project("机场面板", "部署节点")   # 提供真实事实，锚点非空
+        return tmp, body
+
+    def test_critical_writes_anchors(self):
+        # 200000/256000≈78% > 触发线50% → critical，写锚点+给后继会话
+        tmp, body = self._body(200000)
+        try:
+            body.chat("s", "你好")          # 记账真实输入
+            adv = body.continuity_advice("s")
+            self.assertEqual(adv["level"], "critical")
+            self.assertTrue(adv["anchors_written"])
+            self.assertIn("s#2", adv["successor_session"])
+            self.assertTrue(body.brains["s"].written)   # 锚点确实写入内核
+        finally:
+            body.close(); tmp.cleanup()
+
+    def test_warn_does_not_write(self):
+        # 110000/256000≈43% > 预警线40% 但 < 触发线50% → warn, 不写锚点
+        tmp, body = self._body(110000)
+        try:
+            body.chat("s", "你好")
+            adv = body.continuity_advice("s")
+            self.assertEqual(adv["level"], "warn")
+            self.assertFalse(adv.get("anchors_written", False))
+            self.assertEqual(body.brains["s"].written, [])   # 未落盘
+            self.assertIn("预警线", str(adv.get("action", "")) or "")
+        finally:
+            body.close(); tmp.cleanup()
+
+    def test_ok_is_healthy(self):
+        tmp, body = self._body(1000)   # ≈0.4% 窗口
+        try:
+            body.chat("s", "你好")
+            adv = body.continuity_advice("s")
+            self.assertEqual(adv["level"], "ok")
+            self.assertFalse(adv["warning"])
+        finally:
+            body.close(); tmp.cleanup()
 
 
 if __name__ == "__main__":

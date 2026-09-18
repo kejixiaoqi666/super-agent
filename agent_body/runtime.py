@@ -11,6 +11,7 @@ from . import config as cfg
 from .context import ProjectContext
 from .curate import Curator
 from .budget import ContextBudget, estimate_tokens
+from .continuity import successor_id
 from .storage import Storage
 from .assets import AssetStore
 from .images import ImageStore
@@ -434,6 +435,37 @@ class Body:
             return self.continuity.status(session)
         except Exception:
             return {"session": session, "needs_continuity": False}
+
+    def continuity_advice(self, session: str) -> dict:
+        """完整的自动续接建议（可执行的闭环动作，供 CLI / 宿主调用）。
+
+        - 仅 critical（已达触发线）才实际写锚点进向量记忆 + 进入冷却；
+        - warn/ok 只给建议，不落盘、不创建 brain（轻量咨询）。
+        - 返回 level + 后继会话 + pending 任务数，宿主可据此决定是否切到 successor。
+        """
+        st = self.continuity_status(session)
+        advice = dict(st)
+        advice["successor_session"] = successor_id(session)
+        advice["pending"] = 0
+        try:
+            advice["pending"] = self.queue.pending_count()
+        except Exception:
+            pass
+        if st.get("level") == "critical":
+            try:
+                brain = self.brain(session)
+            except Exception:
+                brain = None
+            res = self.continuity.execute(session, self._continuity_meta(session),
+                                          brain=brain)
+            advice.update({k: res.get(k) for k in (
+                "successor_session", "anchors", "anchors_written", "note")})
+        advice["action"] = {
+            "critical": "建议 /new 启动新会话，续接锚点已/将写入向量记忆",
+            "warn": "输入接近预警线，留意；可提前 /new 主动续接",
+            "ok": "输入聚焦健康，无需续接",
+        }[st.get("level", "ok")]
+        return advice
 
     def chat_image(self, session: str, image: Union[str, Path, bytes],
                    message: str = "看看这张图", person_id=None) -> dict:

@@ -41,15 +41,19 @@ class ContextBudget:
     def __init__(self, data_dir: str | Path, max_tokens: int = 16000,
                  archive_at: float = 0.8,
                  context_length: int = 256000,
-                 continuity_at: float = 0.5):
+                 continuity_at: float = 0.5,
+                 warn_ratio: float = 0.8):
         """max_tokens: 预算上限；archive_at: 达到该比例触发压缩信号。
         context_length: 模型上下文窗口（触发自动续接的分母）；
         continuity_at: 当轮真实输入占窗口比例达到它 → over_compressed（自动续接）。
+        warn_ratio: 预警线 = continuity_at*warn_ratio（预动——在到阈值前提醒，非被动临界）。
         """
         self.max_tokens = max_tokens
         self.archive_at = archive_at
         self.context_length = max(1, context_length)
         self.continuity_at = max(0.1, min(0.95, continuity_at))
+        self.warn_ratio = max(0.1, min(1.0, warn_ratio))
+        self.warn_at = self.continuity_at * self.warn_ratio   # 预警线占窗口比例
         self.path = Path(data_dir) / "budget.json"
         self.usage = self._load()
 
@@ -115,18 +119,32 @@ class ContextBudget:
         return last >= self.context_length * self.continuity_at
 
     def continuity_status(self, session: str) -> dict:
-        """该会话的续接判断详情（供 CLI /continuity 展示）。"""
+        """该会话的续接判断详情（供 CLI /continuity 展示）。
+
+        level: ok(健康) / warn(接近预警线, 建议留意) / critical(应续接新会话)。
+        预动：在到触发阈值前按 warn_ratio 提前预警，而非被动临界才动作。
+        """
         u = self.session_usage(session)
         window = self.context_length
         last = u.get("last_input", 0)
+        pct = round(last / window, 4) if window else 0.0
+        if self.over_compressed(session):
+            level = "critical"
+        elif last > 0 and pct >= self.warn_at:
+            level = "warn"
+        else:
+            level = "ok"
         return {
             "session": session,
             "window": window,
             "continuity_at": self.continuity_at,
+            "warn_at": round(self.warn_at, 4),
             "last_input": last,
             "max_input": u.get("max_input", 0),
             "cum_cost": u.get("prompt", 0) + u.get("completion", 0),
-            "input_pct": round(last / window, 4) if window else 0.0,
+            "input_pct": pct,
+            "level": level,
+            "warning": level in ("warn", "critical"),
             "needs_continuity": self.over_compressed(session),
         }
 

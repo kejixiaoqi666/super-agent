@@ -205,16 +205,25 @@ def main():
                         if s.get("ready"):
                             print(f"     已预检: {'; '.join(s['ready'])}")
                 elif message == "/continuity":
-                    # /continuity —— 自动续接状态（当轮真实输入占窗口比例）
-                    c = body.continuity_status(args.session)
-                    print(f"会话 {c.get('session')}  窗口 {c.get('window','?')} tokens")
+                    # /continuity —— 自动续接状态（当轮真实输入占窗口比例 + 预动预警）
+                    c = body.continuity_advice(args.session)
+                    lvl = c.get("level", "ok")
+                    sym = {"critical": "🔴", "warn": "⚠️", "ok": "✅"}.get(lvl, "❔")
+                    print(f"{sym} 会话 {c.get('session')}  窗口 {c.get('window','?')} tokens")
                     print(f"当轮输入: {c.get('last_input',0):,}  "
                           f"(峰值 {c.get('max_input',0):,})  "
                           f"占窗口 {c.get('input_pct',0)*100:.1f}%")
-                    print(f"累计成本: {c.get('cum_cost',0):,}")
-                    flag = "⚠️ 建议自动续接新会话" if c.get("needs_continuity")\
-                        else ("✅ 输入聚焦，暂无需续接")
-                    print(flag)
+                    print(f"预警线: {c.get('warn_at',0)*100:.1f}%  "
+                          f"触发线: {c.get('continuity_at',0)*100:.1f}%  "
+                          f"级别: {lvl}")
+                    print(f"累计成本: {c.get('cum_cost',0):,}  "
+                          f"未完成任务: {c.get('pending',0)}")
+                    print(f"后继会话: {c.get('successor_session')}")
+                    print(f"建议: {c.get('action','')}")
+                    if c.get("anchors_written"):
+                        print(f"续接锚点已写入向量记忆: {c.get('note','')}")
+                    elif c.get("level") == "critical":
+                        print("(续接锚点未能写入——当前无大脑/无可写事实，不编造内容)")
                 elif message.startswith("/learn"):
                     # /learn <后置命令> —— 记住"做完当前这类任务→用该命令"的习惯
                     cmd = message[6:].strip()

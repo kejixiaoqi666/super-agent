@@ -96,6 +96,36 @@ class OpenAIProviderTest(unittest.TestCase):
         with self.assertRaises(ProviderError):
             bad.complete(req)
 
+    def _parse(self, **usage):
+        return self.p._parse({
+            "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+            "usage": usage,
+        })
+
+    def test_parses_real_usage(self):
+        out = self._parse(prompt_tokens=1234, completion_tokens=56,
+                          total_tokens=1290)
+        self.assertEqual(out["usage"]["prompt_tokens"], 1234)
+        self.assertEqual(out["usage"]["completion_tokens"], 56)
+        self.assertEqual(out["usage"]["total_tokens"], 1290)
+        self.assertEqual(out["content"], "hi")
+
+    def test_malformed_usage_does_not_kill_response(self):
+        # 坏 usage（非数字/缺失）绝不能让有效补全被拒或触发 fallback
+        out = self._parse(prompt_tokens="N/A", completion_tokens=None)
+        self.assertEqual(out["usage"]["prompt_tokens"], 0)
+        self.assertEqual(out["usage"]["completion_tokens"], 0)
+        self.assertEqual(out["content"], "hi")
+
+    def test_no_usage_still_parses(self):
+        out = self.p._parse({
+            "choices": [{"message": {"role": "assistant", "content": "ok"}}]})
+        # 无 usage 时安全兜底 0（保持一致形状，不报错）
+        self.assertEqual(out["usage"], {"prompt_tokens": 0,
+                                        "completion_tokens": 0,
+                                        "total_tokens": 0})
+        self.assertEqual(out["content"], "ok")
+
 
 class FallbackRouterTest(unittest.TestCase):
     def test_primary_succeeds(self):

@@ -24,8 +24,35 @@ from superbrain2.core.llm import LLMResponse  # noqa: E402
 
 
 class _FakeLLM:
+    def __init__(self, usage=None):
+        self._u = usage or (1234, 56, 1290)
     def chat(self, msgs, tools=None):
-        return LLMResponse(content="ok")
+        return LLMResponse(content="ok", prompt_tokens=self._u[0],
+                           completion_tokens=self._u[1], total_tokens=self._u[2])
+
+
+class UsageThreadingTest(unittest.TestCase):
+    """真实内核：LLMResponse usage → agent.usage() → facade.usage() 贯通，每轮重置。"""
+
+    def test_agent_usage_reflects_real_prompt_tokens(self):
+        agent = SuperBrainAgent(_FakeLLM(), store=None)
+        agent._run_tool_loop([{"role": "user", "content": "hi"}], max_steps=2)
+        u = agent.usage()
+        self.assertEqual(u["prompt_tokens"], 1234)
+        self.assertEqual(u["completion_tokens"], 56)
+        self.assertEqual(u["calls"], 1)
+
+    def test_usage_resets_per_turn(self):
+        agent = SuperBrainAgent(_FakeLLM(), store=None)
+        agent._run_tool_loop([{"role": "user", "content": "a"}], max_steps=2)
+        agent._run_tool_loop([{"role": "user", "content": "b"}], max_steps=2)
+        self.assertEqual(agent.usage()["calls"], 1)   # 第二轮从零重计
+
+    def test_facade_usage_through(self):
+        from superbrain2.facade import SuperBrain
+        sb = SuperBrain(llm=_FakeLLM(), store=None)
+        sb.chat("测试")
+        self.assertEqual(sb.usage()["prompt_tokens"], 1234)
 
 
 FACTS = [

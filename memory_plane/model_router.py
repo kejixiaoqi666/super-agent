@@ -91,13 +91,20 @@ class OpenAIProvider(Provider):
             tool_calls = choice.get("tool_calls") or []
             out = {"provider": self.name, "content": content,
                    "tool_calls": [dict(t) for t in tool_calls]}
-            # 抓真实 token 用量（每轮真实输入大小，供预算/自动续接判断）
+            # 抓真实 token 用量（每轮真实输入大小，供预算/自动续接判断）。
+            # 关键：usage 解析绝不能拖垮主响应——非数字/缺字段一律安全兜底 0，
+            # 坏 usage 不应让一个有效补全被误拒或误触发 provider 切换。
             usage = data.get("usage") or {}
-            if isinstance(usage, dict) and usage:
+            if isinstance(usage, dict):
+                def _num(v) -> int:
+                    try:
+                        return int(v) if v not in (None, "") else 0
+                    except (TypeError, ValueError):
+                        return 0
                 out["usage"] = {
-                    "prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
-                    "completion_tokens": int(usage.get("completion_tokens", 0) or 0),
-                    "total_tokens": int(usage.get("total_tokens", 0) or 0),
+                    "prompt_tokens": _num(usage.get("prompt_tokens")),
+                    "completion_tokens": _num(usage.get("completion_tokens")),
+                    "total_tokens": _num(usage.get("total_tokens")),
                 }
             return out
         except Exception as e:  # 缺字段/结构不对

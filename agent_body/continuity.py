@@ -96,8 +96,7 @@ class ContinuityManager:
         brain = brain or self.brain
         anchors = self.make_anchors(dict(meta or {}, session=session))
         note = ""
-        # 记录触发时刻，进入冷却（防刷屏）
-        self._last_fired[str(session)] = time.time()
+        wrote = False
         if brain is not None and anchors:
             try:
                 text = "\n".join(anchors)
@@ -106,12 +105,18 @@ class ContinuityManager:
                     importance=1.0, tier="recall")
                 note = (f"已写入 {len(anchors)} 条精确锚点到向量记忆"
                         f"{' (node ' + node + ')' if isinstance(node, str) and node else ''}")
+                wrote = True
             except Exception as e:
                 note = f"锚点写入失败（不编造内容）: {type(e).__name__}"
+        # 仅当锚点真正写入成功才进入冷却——失败不压制后续重试（防刷屏但不吞失效）
+        if wrote:
+            self._last_fired[str(session)] = time.time()
         succ = successor_id(session)
         return {
             "successor_session": succ,
             "anchors": anchors,
             "note": note,
-            "needs_continuity": bool(anchors) or bool(note),
+            # 语义：execute 只在本该续接时被调用 → 已触发，应启动后继会话
+            "needs_continuity": True,
+            "anchors_written": wrote,
         }

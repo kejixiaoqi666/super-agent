@@ -42,17 +42,20 @@ Hermes 把早期对话"压成摘要"——摘要由模型生成，必然有损�
 ## 4. 自动续接流程
 
 ```
-每轮 chat 结束 → 记录该轮真实输入 token（压缩后）
+每轮 chat 结束 → 记录该轮真实输入 token（压缩后，内核 usage）
   → ContextBudget 更新 per-turn 高水位 last_input / max_input
-  → 若 last_input / context_length >= continuity_at（默认 0.5，Hermes 同款触发线）
-       → ContinuityManager 触发：
+  → 分级：input_pct < warn_at → ok；≥ warn_at → warn(预动预警, 建议留意)；
+          ≥ continuity_at → critical(应续接新会话)
+  → critical：ContinuityManager 触发：
            1. 生成精确锚点（原词句，非摘要）
            2. 写向量记忆（tags=[continuity, session]）—— 后继会话可精确召回
-           3. 返回 successor_session（如 <当前>#2）
-           4. 返回 continuity note（供网关/调用方启动新会话）
-  → 新会话首轮：handover/briefing 自动注入锚点简报（已具备）
-       → 无缝：新会话知道上一会话在哪、做过什么、下一步是什么
+           3. 返回 successor_session（如 <当前>#2） + 进入冷却(600s, 仅写入成功)
+  → Body.continuity_advice(session)：可执行闭环——critical 才落盘, warn/ok 轻量咨询
+  → 新会话首轮：handover/briefing 自动注入锚点简报 → 无缝
 ```
+
+**预动性**：预警线 warn_at = continuity_at × warn_ratio(默认0.8)，在真正到阈值前就提醒，
+用户可主动 `/new` 续接，而非被动临界才动作。
 
 ## 5. 落地清单
 
