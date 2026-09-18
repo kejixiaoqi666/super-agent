@@ -514,7 +514,7 @@ class Body:
         """懒加载自进化思考（观察/提案/批准/执行）。"""
         return self.sovereign().evolution
 
-    # ---- 层面一开放：把主权/自进化能力开放成 AI 可调用的工具面 ----
+    # 层面一开放：把主权/自进化能力开放成 AI 可调用的工具面
     def ai_sovereign_toolset(self) -> dict:
         """AI 可直接调用的「自进化机制」工具面（薄封装，内部全走已测模块）。
 
@@ -549,7 +549,99 @@ class Body:
             "check_write": sov.check_write,
             "trust_mode": sov.trust.get,
             "set_trust_mode": sov.trust.set,
+            "selftest": self.selftest,          # AI 自测找bug
+            "ops_health": self.ops_health,      # AI 自运维健康
+            "ops_diagnose": self.ops_diagnose,  # AI 自运维诊断
         }
+
+    # ---- 自运维 + 自测 bug（AI 运维自身/测自身） ----
+    def selftest(self, workdir: str | Path | None = None,
+                 extra_args: str = "", timeout_s: float = 180.0,
+                 pool_size: int = 2,
+                 python: str | None = None) -> dict:
+        """AI 自测：用执行 daemon 跑 pytest，找缺陷；失败自动入自进化观察(error)。
+
+        workdir 默认当前项目根；extra_args 可加路径/标记。python 默认用当前解释器
+        (sys.executable，跑在带 pytest 的环境)。返回结构化结果。
+        """
+        import shlex
+        import sys
+        py = shlex.quote(python or sys.executable)
+        wd = str(workdir or self.data_dir.parent)
+        cmd = f"cd {shlex.quote(wd)} && {py} -m pytest -q {extra_args}"
+        from .exec.daemon import Task
+        r = self.executor(pool_size).execute(
+            Task(runtime="shell", command=cmd, timeout_s=timeout_s))
+        out = r.output
+        import re as _re
+        passed = int((_re.search(r"(\d+) passed", out) or [0, "0"])[1] or 0)
+        failed = int((_re.search(r"(\d+) failed", out) or [0, "0"])[1] or 0)
+        errors = int((_re.search(r"(\d+) error", out) or [0, "0"])[1] or 0)
+        ok = r.ok and failed == 0 and errors == 0
+        # 失败/异常自动接自进化（AI 可据此提修复提案）
+        if not ok:
+            try:
+                detail = f"selftest failed={failed} errors={errors}: {out.strip()[-300:]}"
+                self.evolution().observe("error", detail, source="selftest")
+            except Exception:
+                pass
+        return {"ok": ok, "passed": passed, "failed": failed, "errors": errors,
+                "code": r.code, "elapsed_ms": r.elapsed_ms,
+                "output": out[:4000], "observed_error": not ok}
+
+    def ops_health(self) -> dict:
+        """AI 自运维：汇总运行健康（executor/队列/自进化错误/预算/信任模式）。"""
+        h = {"executor": None, "queue_pending": 0, "error_observations": 0,
+             "pending_proposals": 0, "pending_upgrades": 0, "trust_mode": "guided"}
+        try:
+            h["executor"] = self.executor().stats()
+        except Exception:
+            pass
+        try:
+            h["queue_pending"] = self.queue.pending_count()
+        except Exception:
+            pass
+        try:
+            h["error_observations"] = len(self.evolution().observations("error"))
+        except Exception:
+            pass
+        try:
+            h["pending_proposals"] = len(self.evolution().pending())
+        except Exception:
+            pass
+        try:
+            h["pending_upgrades"] = len(self.sovereign().upgrade_queue.pending())
+        except Exception:
+            pass
+        try:
+            h["trust_mode"] = self.sovereign().trust.get()
+        except Exception:
+            pass
+        return h
+
+    def ops_diagnose(self) -> dict:
+        """AI 自运维诊断：从健康信号产出待办（供 AI 决策提修复提案，不编造）。"""
+        health = self.ops_health()
+        issues = []
+        try:
+            ev = self.evolution()
+            errs = ev.observations("error")[:5]
+            if errs:
+                issues.append({"kind": "selftest/exec_error",
+                               "count": len(ev.observations("error")),
+                               "sample": errs[0]["detail"][:200]})
+        except Exception:
+            pass
+        if health.get("pending_proposals"):
+            issues.append({"kind": "pending_approval",
+                           "count": health["pending_proposals"],
+                           "note": "有待批准的进化提案"})
+        if health.get("pending_upgrades"):
+            issues.append({"kind": "pending_upgrade",
+                           "count": health["pending_upgrades"],
+                           "note": "有底层升级文档待门禁"})
+        return {"health": health, "issues": issues,
+                "diagnosed": bool(issues)}
 
     def chat_image(self, session: str, image: Union[str, Path, bytes],
                    message: str = "看看这张图", person_id=None) -> dict:

@@ -29,6 +29,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | 成熟补齐7 | **执行 daemon**(高并发省资源: 有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限setrlimit+沙箱自动清理, 1000任务215/s峰值仅27MB零残留) / **Body.run_scripts批量执行** | `exec/daemon.py` `exec/sandbox.py` |
 | 成熟补齐8 | **Autopilot 自动操作**(统一Driver抽象: describe拿布局/act注入/文本定位, 能拿布局不截图; Browser后端=Playwright/CDP挖DOM; 惰性加载后端, 不用零占用) / **分层预警已含** | `autopilot/` |
 | 成熟补齐9 | **主权开放架构**(阶段①-⑥: 插件注册中心=随装随卸即净/坏插件隔离 + 内核只读门=内核不可撼动,写拒提示走升级 + 自我修改SelfMod=留痕可回滚 + 自进化思考=观察/提案/批准才执行,上层自主底层批准 + 升级治理Queue=文档→门禁→测试→并入 + 信任模式guided/sovereign + 层面一开放Body.ai_sovereign_toolset=AI可调用的自进化能力面) | `sovereign/` `evolution/` `runtime.py` |
+| 成熟补齐10 | **AI 自运维+自测**(selftest=执行daemon跑pytest找缺陷,失败自动入自进化观察; ops_health=健康汇总[executor/队列/错误观察/待提案/升级/信任模式]; ops_diagnose=产出待办供AI提修复提案; 全部进AI工具面) | `runtime.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 

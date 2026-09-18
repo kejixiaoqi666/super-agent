@@ -89,8 +89,9 @@
 | 主权开放 阶段④（升级治理: upgrade_queue 需求文档存档→排队→门禁approve→测试→并入merge, 不可跳过, 存底代码文档） | sovereign/upgrade_queue.py | ✅ 2026-09 |
 | 主权开放 阶段⑥（信任模式: TrustMode guided/sovereign 切换, 持久化; 只改AI自主体验, 内核只读+底层批准硬约束不随mode变） | sovereign/trust.py | ✅ 2026-09 |
 | 主权开放 阶段⑤（层面一开放: Body.ai_sovereign_toolset 能力面暴露给AI, 思考进化循环接AI自主: observe/propose_upper自主apply/propose_base批准/插件/升级/trust） | agent_body/runtime.py | ✅ 2026-09 |
+| AI 自运维+自测（selftest跑pytest找缺陷入自进化; ops_health健康汇总; ops_diagnose产出待办; 进AI工具面） | agent_body/runtime.py | ✅ 2026-09 |
 
-**总测试数：385 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：388 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 
