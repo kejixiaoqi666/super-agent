@@ -74,14 +74,21 @@ class EvolutionLedger:
     def add_proposal(self, center: str, target: str, suggestion: str,
                      reasoning: str = "", priority: str = "medium",
                      refs: Optional[List[str]] = None,
-                     state: str = "pending_approval") -> dict:
-        """AI 思考后成形的提案。center=进化方向，target=改哪里，suggestion=怎么改。"""
+                     state: str = "pending_approval",
+                     level: str = "upper") -> dict:
+        """AI 思考后成形的提案。center=进化方向，target=改哪里，suggestion=怎么改。
+
+        level 分层（用户定调 2026-09）：upper=上层模块/插件(可自主进化,无需批准)，
+        base=底层/内核(必须用户批准才执行)。
+        """
         if state not in STATUSES:
             raise ValueError(f"未知状态 {state!r}")
+        if level not in ("upper", "base"):
+            raise ValueError(f"未知进化层级 {level!r}（upper/base）")
         prop = {"pid": _nid("prop"), "center": center, "target": target,
                 "suggestion": suggestion, "reasoning": reasoning,
                 "priority": priority, "refs": list(refs or []),
-                "state": state, "ts": _now(),
+                "state": state, "level": level, "ts": _now(),
                 "history": [{"state": state, "ts": _now()}]}
         self.data["proposals"].append(prop)
         self._save()
@@ -117,6 +124,10 @@ class EvolutionLedger:
             "thinking": {"pending_approval", "archived"},
             "archived": set(),
         }
+        # 上层模块/插件(level=upper)自主进化：pending_approval 可直接 applied，
+        # 无需用户批准；底层(base)仍须经 approved 才可 applied。
+        if cur == "pending_approval" and p.get("level") == "upper":
+            legal["pending_approval"].add("applied")
         if to not in legal.get(cur, set()):
             return {"ok": False,
                     "error": f"非法迁移: {cur} → {to}（{pid} 必须经 approved 才可 apply）"}

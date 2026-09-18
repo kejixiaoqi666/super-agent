@@ -23,14 +23,18 @@ class Proposer:
 
     def draft(self, center: str, target: str, suggestion: str,
               reasoning: str = "", priority: Optional[str] = None,
-              refs: Optional[List[str]] = None) -> dict:
-        """AI 思考后成提案，落 pending_approval（已准备，等用户批准）。"""
+              refs: Optional[List[str]] = None,
+              level: str = "upper") -> dict:
+        """AI 思考后成提案，落 pending_approval（已准备）。
+
+        level: upper=上层模块/插件(可自主进化) / base=底层内核(需用户批准)。
+        """
         return self.ledger.add_proposal(
             center=center, target=target, suggestion=suggestion,
             reasoning=reasoning,
             priority=priority or "medium",
             refs=list(refs or []) if refs else None,
-            state="pending_approval")
+            state="pending_approval", level=level)
 
     def draft_from_observations(self, center: str, target: str,
                                 suggestion: str, refs: Optional[List[str]] = None,

@@ -32,14 +32,18 @@ class ApprovalGate:
 
     def apply(self, pid: str, executor: Optional[Callable[[dict], None]] = None,
               by: str = "system") -> dict:
-        """执行已批准的提案。【硬约束】仅 approved 可 apply，否则拒绝。
+        """执行提案。分层（用户定调 2026-09）：
+          - upper(上层模块/插件)：自主进化，无需批准，直接落地；
+          - base(底层/内核)：必须 approved 才可 apply，否则硬拒绝。
         executor(proposal) 负责真实落地（如 self_mod 改插件/写配置）。
         """
         p = self.ledger.get_proposal(pid)
         if p is None:
             return {"ok": False, "error": f"提案不存在: {pid}"}
-        if p["state"] != "approved":
-            return {"ok": False, "error": f"未批准不得执行：{pid} 当前 {p['state']}"}
+        level = p.get("level", "upper")
+        if level == "base" and p["state"] != "approved":
+            return {"ok": False,
+                    "error": f"底层进化需批准：{pid} 当前 {p['state']}（上层可自主）"}
         if executor is not None:
             executor(p)                     # 真实落地（可抛错）
         return self.ledger.transition(pid, "applied", by=by)

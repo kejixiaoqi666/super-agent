@@ -31,16 +31,28 @@ class EvolutionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.ev.observe("hack", "x")
 
-    # ---- 提案 + 批准才执行（核心不变量） ----
-    def test_cannot_apply_before_approve(self):
-        p = self.ev.propose("执行", target="daemon", suggestion="加大超时")
-        # 未批准 apply → 硬拒绝
+    # ---- 提案 + 分层进化（核心不变量） ----
+    def test_upper_self_evolves_without_approval(self):
+        # 上层模块/插件：自主进化，无需批准
+        p = self.ev.propose("执行", target="daemon", suggestion="加大超时")  # upper 默认
+        res = self.ev.apply(p["pid"])
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["state"], "applied")
+
+    def test_base_requires_approval(self):
+        # 底层/内核：必须批准才执行
+        p = self.ev.propose_base("执行", target="daemon", suggestion="加大超时")
         res = self.ev.apply(p["pid"])
         self.assertFalse(res["ok"])
-        self.assertIn("未批准", res["error"])
+        self.assertIn("底层进化需批准", res["error"])
+        # 批准后可执行
+        self.ev.approve(p["pid"])
+        res2 = self.ev.apply(p["pid"])
+        self.assertTrue(res2["ok"])
+        self.assertEqual(res2["state"], "applied")
 
-    def test_approve_then_apply(self):
-        p = self.ev.propose("执行", target="daemon", suggestion="加大超时")
+    def test_approve_then_apply_runs_executor(self):
+        p = self.ev.propose_base("执行", target="daemon", suggestion="加大超时")
         applied = []
         ap = self.ev.approve(p["pid"])
         self.assertTrue(ap["ok"])
@@ -50,12 +62,12 @@ class EvolutionTest(unittest.TestCase):
         self.assertEqual(len(applied), 1)          # 真实落地被调用
 
     def test_illegal_transition_blocked(self):
-        p = self.ev.propose("执行", target="x", suggestion="y")
+        p = self.ev.propose_base("执行", target="x", suggestion="y")
         # 直接 rejected→applied 非法
         self.ev.reject(p["pid"])
-        r = self.ev.apply(p["pid"])               # rejected 后 apply
+        r = self.ev.apply(p["pid"])               # rejected 后 apply 底层
         self.assertFalse(r["ok"])
-        self.assertIn("未批准", r["error"])
+        self.assertIn("需批准", r["error"])
 
     def test_body_run_scripts_auto_observes_errors(self):
         """日常使用：执行失败自动记录为自进化观察(error)。"""

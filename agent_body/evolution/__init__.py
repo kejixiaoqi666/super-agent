@@ -36,13 +36,23 @@ class Evolution:
     def observe(self, kind: str, detail: str, source: str = "", **meta) -> dict:
         return self.observer.record(kind, detail, source, **meta)
 
-    # ---- 思考成提案（落 pending_approval, 等批准） ----
+    # ---- 思考成提案（落 pending_approval） ----
     def propose(self, center: str, target: str, suggestion: str,
                 reasoning: str = "", priority: Optional[str] = None,
-                refs: Optional[List[str]] = None) -> dict:
+                refs: Optional[List[str]] = None,
+                level: str = "upper") -> dict:
+        """成提案。level: upper(上层模块/插件,自主进化) / base(底层内核,需批准)。"""
         return self.proposer.draft(center, target, suggestion,
                                    reasoning=reasoning, priority=priority,
-                                   refs=refs)
+                                   refs=refs, level=level)
+
+    def propose_base(self, center: str, target: str, suggestion: str,
+                     reasoning: str = "", priority: Optional[str] = None,
+                     refs: Optional[List[str]] = None) -> dict:
+        """底层/内核进化提案（必须用户批准才执行）。"""
+        return self.proposer.draft(center, target, suggestion,
+                                   reasoning=reasoning, priority=priority,
+                                   refs=refs, level="base")
 
     def propose_from_observations(self, center: str, target: str,
                                   suggestion: str,
