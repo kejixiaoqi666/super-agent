@@ -61,6 +61,8 @@ class Body:
         self.continuity = ContinuityManager(
             self.budget, context_length=self.budget.context_length,
             continuity_at=self.budget.continuity_at)
+        # 执行 daemon（懒加载：仅首次用到才建，不常驻占内存）
+        self._executor = None
         # Phase 4 存储/资产/图片 + Phase 5 密码本
         self.storage = Storage(data_dir)
         self.assets = AssetStore(self.storage)
@@ -467,6 +469,22 @@ class Body:
         }[st.get("level", "ok")]
         return advice
 
+    def executor(self, pool_size: int = 4):
+        """懒加载执行 daemon（首次调用才建，省内存；Body 关闭时自动回收）。"""
+        if self._executor is None:
+            from .exec.daemon import ExecutorDaemon
+            self._executor = ExecutorDaemon(self.data_dir, pool_size=pool_size)
+        return self._executor
+
+    def run_scripts(self, commands: List[str], runtime: str = "shell",
+                    timeout_s: float = 60.0, pool_size: int = 4,
+                    mem_limit_mb: Optional[int] = None) -> List[dict]:
+        """批量执行多个脚本（同运行时），高并发调度，保持输入顺序，返回结构化结果。"""
+        from .exec.daemon import Task
+        tasks = [Task(runtime=runtime, command=c, timeout_s=timeout_s,
+                      mem_limit_mb=mem_limit_mb) for c in commands]
+        return [r.to_dict() for r in self.executor(pool_size).run_many(tasks)]
+
     def chat_image(self, session: str, image: Union[str, Path, bytes],
                    message: str = "看看这张图", person_id=None) -> dict:
         """带图对话：读图 → base64 data URL → 交给大脑多模态识别（模型识图，非本地OCR）。"""
@@ -723,6 +741,12 @@ class Body:
             except Exception:
                 pass
             self.transcript = None
+        if self._executor is not None:
+            try:
+                self._executor.shutdown()
+            except Exception:
+                pass
+            self._executor = None
         self.closed = True
         if errors:
             raise errors[0]

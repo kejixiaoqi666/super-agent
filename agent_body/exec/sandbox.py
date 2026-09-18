@@ -93,11 +93,13 @@ class Sandbox:
     def run(self, cmd: str, task_id: str = "adhoc", timeout: float = 60.0,
             keep: bool = False, retries: int = 0,
             retryable_errors: tuple = (),
-            budget: Optional[RetryBudget] = None) -> dict:
+            budget: Optional[RetryBudget] = None,
+            mem_limit_mb: Optional[int] = None) -> dict:
         """在隔离沙箱目录执行命令。
 
         keep=True 时保留工作目录与产物（供取走），否则结束自动回收。
         retries/budget：统一重试；传 RetryBudget 时用预算上限（attempts+wait）
+        mem_limit_mb: Linux 用 setrlimit(RLIMIT_AS) 限制子进程虚拟内存，超限归 resource 错。
         返回 {ok, code, output, workdir, cleaned, elapsed, attempts}.
         """
         danger = _is_dangerous(cmd)
@@ -111,10 +113,20 @@ class Sandbox:
         def go():
             # Popen + select 带超时流式读：既保内存(截断)又保超时(不阻塞死)
             import select as _select
+            preexec = None
+            if mem_limit_mb:
+                # 内存上限：fork 出的 shell/脚本进程设 RLIMIT_AS（虚拟内存硬上限）。
+                # setrlimit 是 async-signal-safe 系统调用，preexec_fn 内安全（不分配内存）。
+                _lim = mem_limit_mb * 1024 * 1024
+                def _limit():
+                    import resource as _res
+                    _res.setrlimit(_res.RLIMIT_AS, (_lim, _lim))
+                    _res.setrlimit(_res.RLIMIT_CORE, (0, 0))
+                preexec = _limit
             proc = subprocess.Popen(
                 cmd, shell=True, cwd=str(workdir),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1)
+                text=True, bufsize=1, preexec_fn=preexec)
             out_parts: List[str] = []
             total = 0
             cap = 100_000  # 最多保留 ~100KB，防大输出吃内存

@@ -26,6 +26,7 @@ SPA 目前包含 AgentWorkbench 控制面和 `agent_body` 运行时。它已能�
 | 成熟补齐4 | **经验自动固化**(重复成功→SKILL.md) / **跨会话自我重建**(/new不失忆) / **预动性**(主动预测并预检用户下一步, /next + 数据驱动习惯学习 /learn) | `skill_compiler.py` `handover.py` `proactive.py` |
 | 成熟补齐5 | **委派资源治理**(并行cap+步预算+批次上限) / **会话权限隔离**(委派子代理默认只读, 写入/执行落session沙箱) | `delegation.py` |
 | 成熟补齐6 | **自动续接**(长上下文→按当轮真实输入占窗口比例自动开新会话, 精确锚点写向量记忆无缝衔接) / **每轮真实输入记账**(区分累计成本vs本轮思考量) / **分级预警**(✅ok/⚠️warn/🔴critical, 预动在阈值前提醒) | `continuity.py` `budget.py` |
+| 成熟补齐7 | **执行 daemon**(高并发省资源: 有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限setrlimit+沙箱自动清理, 1000任务215/s峰值仅27MB零残留) / **Body.run_scripts批量执行** | `exec/daemon.py` `exec/sandbox.py` |
 
 **常用 CLI 命令**（`python -m agent_body` 或 Rust `sa` 后）：
 

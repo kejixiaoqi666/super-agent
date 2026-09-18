@@ -80,8 +80,10 @@
 | 会话权限隔离（委派子代理默认只读, 写入/执行落session沙箱） | agent_body/delegation.py | ✅ 2026-09 |
 | 自动续接（当轮真实输入占窗口比例→精确锚点写向量记忆→后继会话无缝衔接） | agent_body/continuity.py | ✅ 2026-09 |
 | 每轮真实输入记账（last/max_input, 区分累计成本vs本轮思考量, over_compressed触发） | agent_body/budget.py | ✅ 2026-09 |
+| 执行 daemon（有界worker池+内存队列+多运行时shell/python/node+错误分类+内存上限+沙箱清理, 高并发省资源） | agent_body/exec/daemon.py | ✅ 2026-09 |
+| Body 批量执行 run_scripts（懒加载executor, 保序并发, close回收） | agent_body/runtime.py | ✅ 2026-09 |
 
-**总测试数：315 全绿。** 这些是地基，后期规划全部建立在它们之上。
+**总测试数：343 全绿。** 这些是地基，后期规划全部建立在它们之上。
 
 ---
 
