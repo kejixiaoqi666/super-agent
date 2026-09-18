@@ -136,17 +136,97 @@ def serve(body):
         request = urllib.request.Request(
             "https://api.telegram.org/bot" + token + "/" + method,
             data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=40) as response:
-            result = json.load(response)
+        try:
+            with urllib.request.urlopen(request, timeout=40) as response:
+                result = json.load(response)
+        except Exception as e:
+            # 绝不把含 /bot<token>/ 的 URL 抛出去/打进日志（token 泄漏）
+            raise RuntimeError(f"Telegram {method} 请求失败: {type(e).__name__}") from None
         if not result.get("ok"):
-            raise RuntimeError("Telegram request failed")
+            raise RuntimeError(f"Telegram {method} 返回错误: {result.get('description','')}")
         return result["result"]
+
+    def _handle_message(update):
+        # 逐条消息处理：任何异常都不应拖垮 serve()（opus-5 审查：主循环脆弱）
+        message = update.get("message", {})
+        sender = message.get("from", {}).get("id")
+        chat = message.get("chat", {})
+        text = message.get("text")
+        if sender not in allowed or chat.get("type") != "private" or not text:
+            return
+        # 会话号：/new 递增 → 新会话 telegram:<id>#N，跨会话重建自动带前文
+        sfile = body.data_dir / "telegram-session.json"
+        try:
+            sess_map = json.loads(sfile.read_text()) if sfile.exists() else {}
+        except Exception:
+            sess_map = {}
+        n = sess_map.get(str(chat["id"]), 1)
+        session = f"telegram:{chat['id']}" if n == 1 else f"telegram:{chat['id']}#{n}"
+
+        # ---- ① 斜杠命令路由 ----
+        if text.strip().startswith("/"):
+            reply = _route_command(body, text, session, chat["id"], sess_map, sfile)
+            api("sendMessage", chat_id=chat["id"], text=reply)
+            return
+
+        # ---- ② 轻量快通道：极简单规则零网络秒回 ----
+        from .fastpath import fast_reply
+        quick = fast_reply(text)
+        if quick is not None:
+            api("sendMessage", chat_id=chat["id"], text=quick)
+            return
+
+        # ---- ③ 大模型路由 ----
+        from .router import Router, needs_live_data, live_answer
+        from superbrain2.core.llm import from_env as _env_llm
+        if _get_router() is None:
+            try:
+                _set_router(Router(_env_llm()))
+            except Exception:
+                pass
+        rt = _get_router()
+
+        # ---- ③.5 实时数据问题 → 联网搜索简洁作答 ----
+        if rt is not None and needs_live_data(text):
+            _la = live_answer(rt._llm, text)
+            if _la:
+                api("sendMessage", chat_id=chat["id"], text=_la)
+                return
+
+        if rt is not None:
+            _route, _ans = rt.classify(text)
+            if _route == "direct":      # 不需过超脑 → 直接简短回答
+                api("sendMessage", chat_id=chat["id"], text=_ans)
+                return
+
+        # ---- ④ 需过超脑 → 完整认知管线(可靠工具执行, 真能力) ----
+        try:
+            mid = api("sendMessage", chat_id=chat["id"], text="⏳ 处理中…")["message_id"]
+            r = body.chat(session, text, str(sender))
+            reply = (r.get("reply") or "").strip()
+            if len(reply) > 4000:
+                try:
+                    api("deleteMessage", chat_id=chat["id"], message_id=mid)
+                except Exception:
+                    pass
+                for i in range(0, len(reply), 4000):
+                    api("sendMessage", chat_id=chat["id"], text=reply[i:i + 4000])
+            else:
+                api("editMessageText", chat_id=chat["id"], message_id=mid,
+                    text=reply or "（无回复）")
+        except Exception:
+            logging.warning("Telegram turn failed", exc_info=True)
+            try:
+                api("sendMessage", chat_id=chat["id"],
+                    text="本轮处理失败，未自动重试工具动作。")
+            except Exception:
+                logging.warning("Telegram error notification failed")
 
     while True:
         try:
             updates = api("getUpdates", offset=offset, timeout=25, allowed_updates=["message"])
         except Exception:
-            # Exception strings can contain the URL (and thus the token).
+            # api() 已脱敏(不含 token URL)；polling 失败重试不崩
             logging.warning("Telegram polling failed; retrying")
             time.sleep(3)
             continue
@@ -156,83 +236,8 @@ def serve(body):
             tmp = checkpoint.with_suffix(".tmp")
             tmp.write_text(json.dumps(offset), encoding="utf-8")
             tmp.replace(checkpoint)
-            message = update.get("message", {})
-            sender = message.get("from", {}).get("id")
-            chat = message.get("chat", {})
-            text = message.get("text")
-            if sender not in allowed or chat.get("type") != "private" or not text:
-                continue
-            # ---- 会话号：/new 时递增，形成新会话(telegram:<id>#N)，跨会话重建自动带前文 ----
-            sfile = body.data_dir / "telegram-session.json"
             try:
-                sess_map = json.loads(sfile.read_text()) if sfile.exists() else {}
+                _handle_message(update)
             except Exception:
-                sess_map = {}
-            n = sess_map.get(str(chat["id"]), 1)
-            session = f"telegram:{chat['id']}" if n == 1 else f"telegram:{chat['id']}#{n}"
-
-            # ---- ① 斜杠命令路由（带中文注释，供维护）----
-            if text.strip().startswith("/"):
-                reply = _route_command(body, text, session, chat["id"], sess_map, sfile)
-                api("sendMessage", chat_id=chat["id"], text=reply)
-                continue
-
-            # ---- ② 轻量快通道：极简单规则零网络秒回 ----
-            from .fastpath import fast_reply
-            quick = fast_reply(text)
-            if quick is not None:
-                api("sendMessage", chat_id=chat["id"], text=quick)
-                continue
-
-            # ---- ③ 大模型路由：输入先调大模型快速判断简单/复杂 ----
-            from .router import Router, needs_live_data, live_answer
-            from superbrain2.core.llm import from_env as _env_llm
-            _trace("pre-router")
-            if _get_router() is None:
-                try:
-                    _set_router(Router(_env_llm()))
-                    _trace("router built OK")
-                except Exception as _e:
-                    _trace(f"router build FAIL: {type(_e).__name__}: {_e}")
-            rt = _get_router()
-            _trace(f"rt is None? {rt is None} | needs_live_data={needs_live_data(text)}")
-
-            # ---- ③.5 实时数据问题 → 联网搜索简洁作答(不再打太极) ----
-            if rt is not None and needs_live_data(text):
-                _la = live_answer(rt._llm, text)
-                _trace(f"live_data ans_len={len(_la)}")
-                if _la:
-                    api("sendMessage", chat_id=chat["id"], text=_la)
-                    continue
-
-            if rt is not None:
-                _route, _ans = rt.classify(text)
-                _trace(f"classify -> {_route} ans_len={len(_ans)}")
-                if _route == "direct":      # 不需过超脑 → 直接简短回答
-                    api("sendMessage", chat_id=chat["id"], text=_ans)
-                    continue
-            # 需过超脑/判不了 → 交给超脑完整认知管线(真流式)
-
-            # ---- ③ 需过超脑 → 完整认知管线(可靠工具执行, 真能力) ----
-            try:
-                mid = api("sendMessage", chat_id=chat["id"], text="⏳ 处理中…")["message_id"]
-                r = body.chat(session, text, str(sender))
-                reply = (r.get("reply") or "").strip()
-                _trace(f"body.chat reply_len={len(reply)}")
-                if len(reply) > 4000:
-                    try:
-                        api("deleteMessage", chat_id=chat["id"], message_id=mid)
-                    except Exception:
-                        pass
-                    for i in range(0, len(reply), 4000):
-                        api("sendMessage", chat_id=chat["id"], text=reply[i:i + 4000])
-                else:
-                    api("editMessageText", chat_id=chat["id"], message_id=mid,
-                        text=reply or "（无回复）")
-            except Exception:
-                logging.warning("Telegram turn failed", exc_info=True)
-                try:
-                    api("sendMessage", chat_id=chat["id"],
-                        text="本轮处理失败，未自动重试工具动作。")
-                except Exception:
-                    logging.warning("Telegram error notification failed")
+                # 单条消息失败不崩 bot；offset 已预留避免重放副作用
+                logging.warning("消息处理失败(已跳过, bot 继续运行)", exc_info=True)
