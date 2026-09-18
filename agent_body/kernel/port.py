@@ -39,6 +39,10 @@ class BrainPort(ABC):
     @abstractmethod
     def chat(self, message: str, person_id: Optional[str] = None,
              images: Optional[List[str]] = None) -> str: ...
+    def usage(self) -> Dict:
+        """当轮真实 token 用量（可选契约；不实现则返回 0，身体用代理估算兜底）。"""
+        return {"prompt_tokens": 0, "completion_tokens": 0,
+                "total_tokens": 0, "calls": 0}
     @abstractmethod
     def remember(self, content: str, scope: str = "user", tier: str = "recall", **kw) -> str: ...
     @abstractmethod

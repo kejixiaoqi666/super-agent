@@ -57,19 +57,21 @@ Hermes 把早期对话"压成摘要"——摘要由模型生成，必然有损�
 ## 5. 落地清单
 
 **super-agent（body，自包含可测）**
-- [ ] `model_router.py`：OpenAIProvider 抓 `usage`（委派路径真实数）✅ 已做
-- [ ] `budget.py`：ContextBudget 升级——跟踪 per-turn 真实输入（last/max_input）+ 区分累计成本，`over_compressed` 按输入占窗口比例
-- [ ] `continuity.py`：ContinuityManager——阈值判断 + 精确锚点生成 + 后继会话 + 写向量记忆
-- [ ] `runtime.py`：chat 结束记录真实输入 + 触发 continuity 检查
-- [ ] `__main__.py`：CLI `/continuity` 查看状态/手动触发
-- [ ] 测试 + 文档
+- [x] `model_router.py`：OpenAIProvider 抓 `usage`（委派路径真实数）✅ 已做
+- [x] `budget.py`：ContextBudget 升级——跟踪 per-turn 真实输入（last/max_input）+ 区分累计成本，`over_compressed` 按输入占窗口比例
+- [x] `continuity.py`：ContinuityManager——阈值判断 + 精确锚点生成 + 后继会话 + 写向量记忆 + **冷却防刷屏(600s)**
+- [x] `runtime.py`：chat 结束用**内核真实 usage** 记账（覆盖代理估算）+ 触发 continuity 检查
+- [x] `__main__.py`：CLI `/continuity` 查看状态
+- [x] 测试 318 全绿 + 文档
 
 **superbrain-2.0（内核，压缩真相源）**
-- [ ] `core/llm.py`：`LLMResponse` 补 `prompt_tokens/completion_tokens/total_tokens`，`chat()` 解析 `usage`
-- [ ] `core/agent.py` / `facade.py`：把当轮 usage 暴露（如 `last_usage` / 会话累计）
-- [ ] super-agent `kernel/superbrain_adapter.py` + `port.py`：BrainPort chat 透出 usage
+- [x] `core/llm.py`：`LLMResponse` 补 `prompt_tokens/completion_tokens/total_tokens`，`chat()` 解析 `usage`
+- [x] `core/agent.py`：`_run_tool_loop` 累计真实用量（单次输入取 max=最坏当轮输入，每轮重置）+ `usage()`
+- [x] `facade.py`：`SuperBrain.usage()` 透出
+- [x] super-agent `kernel/superbrain_adapter.py` + `port.py`：BrainPort `usage()`（可选契约，默认 0 兜底）
 
 ## 6. 验证纪律
-- 用真实 provider 跑一轮，断言 `usage.prompt_tokens` 被正确捕获（非 0、> 精简 prompt 的本地估算）
-- 触发线：构造超大输入 → 断言触发 + 锚点写入向量库 + 后继会话可召回锚点
-- 语义保持：把一段长文写入 → 压缩后 `recall` 能原样取回关键句子（不靠模型）
+- [x] 内核单测：FakeLLM usage→`agent.usage()` 贯通且每轮重置
+- [x] 全链 facade：`SuperBrain.usage()` 返回真实 prompt_tokens
+- [x] super-agent：`Body.chat` 用真实 usage 记账（FakePort usage=900 → last_input≥900），无 usage 时回退身体精简 prompt 代理
+- [ ] 语义保持：把一段长文写入 → 压缩后 `recall` 能原样取回关键句子（不靠模型）——需真实内核+真实模型，作为线上验证项

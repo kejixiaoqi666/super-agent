@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import List, Optional
 
 
@@ -36,14 +37,21 @@ class ContinuityManager:
     """
 
     def __init__(self, budget, brain=None,
-                 context_length: int = 256000, continuity_at: float = 0.5):
+                 context_length: int = 256000, continuity_at: float = 0.5,
+                 cooldown_seconds: int = 600):
         self.budget = budget
         self.brain = brain
         self.context_length = context_length
         self.continuity_at = continuity_at
+        self.cooldown_seconds = cooldown_seconds
+        self._last_fired: dict = {}  # session -> epoch，防重复触发刷屏
 
     # ---- 判断 ----
     def should_continue(self, session: str) -> bool:
+        # 冷却期内不重复触发（上次 execute 后 cooldown 秒内静默）
+        if time.time() - self._last_fired.get(str(session), 0.0) \
+                < self.cooldown_seconds:
+            return False
         try:
             return self.budget.over_compressed(session)
         except Exception:
@@ -88,6 +96,8 @@ class ContinuityManager:
         brain = brain or self.brain
         anchors = self.make_anchors(dict(meta or {}, session=session))
         note = ""
+        # 记录触发时刻，进入冷却（防刷屏）
+        self._last_fired[str(session)] = time.time()
         if brain is not None and anchors:
             try:
                 text = "\n".join(anchors)

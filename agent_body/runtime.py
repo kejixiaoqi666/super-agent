@@ -372,13 +372,19 @@ class Body:
             reply = brain.chat(prompt, person_id=person_id or session)
             brain.save()
         # token 计费 + 上下文统计 + 预算记账
-        # input_tokens = 身体构造的真实输入（curated prompt + 简报）——作为"当轮
-        # 思考量"的下限代理；内核返回真实 usage 时替换为精确值。
+        # input_tokens = 内核返回的真实输入（向量压缩后喂给模型的 usage.prompt_tokens）；
+        # 内核拿不到时用身体构造的精简 prompt(含简报)做下限代理。
         try:
             pt = estimate_tokens(prompt)
             ct = estimate_tokens(reply)
             self.stats.record(session, message, reply, model=self.model)
-            self.budget.record(session, pt, ct, input_tokens=pt)
+            real_in = 0
+            try:
+                real_in = int(brain.usage().get("prompt_tokens", 0) or 0)
+            except Exception:
+                real_in = 0
+            self.budget.record(session, pt, ct,
+                               input_tokens=real_in or pt)
         except Exception:
             pass
         # 自动续接：当轮真实输入占比达阈值 → 写精确锚点 + 给出后继会话

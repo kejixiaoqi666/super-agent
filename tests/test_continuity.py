@@ -110,6 +110,76 @@ class ContinuityTest(unittest.TestCase):
         self.assertEqual(res["note"], "")
         self.assertEqual(res["successor_session"], "s#2")
 
+    def test_cooldown_prevents_duplicate_fire(self):
+        # 触发并 execute 后，冷却期内不重复触发（防刷屏写重复锚点）
+        self.budget.record("s", 10, 10, input_tokens=900)
+        self.assertTrue(self.cm.should_continue("s"))
+        self.cm.execute("s", {"goal": "部署"})           # 记录触发时刻
+        self.assertFalse(self.cm.should_continue("s"))   # 冷却期内静默
+        # 手动清冷却 → 可再次触发
+        self.cm._last_fired["s"] = 0.0
+        self.assertTrue(self.cm.should_continue("s"))
+
+
+class BodyUsageWiringTest(unittest.TestCase):
+    """Body.chat 用内核真实 usage.prompt_tokens 记账（覆盖本地代理估算）。"""
+
+    def test_chat_uses_real_usage_over_proxy(self):
+        from agent_body.runtime import Body
+
+        class FakePort:
+            def __init__(self):
+                self.said = []
+            def chat(self, msg, person_id=None):
+                self.said.append(msg)
+                return "ok"
+            def usage(self):
+                # 内核真实输入：远大于身体构造的精简 prompt
+                return {"prompt_tokens": 900, "completion_tokens": 50,
+                        "total_tokens": 950, "calls": 1}
+            def recall(self, q, k=10): return []
+            def remember(self, c, scope="", tier="", **kw): return "id"
+            def save(self): pass
+            def close(self): pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            work = Path(tmp) / "work"
+            body = Body(data, work, mode="unrestricted")
+            try:
+                body.brains["s"] = FakePort()
+                body.chat("s", "你好")
+                # 输入记账应取内核真实值 900，而非身体精简 prompt 的估算
+                last_input = body.budget.session_usage("s")["last_input"]
+                self.assertGreaterEqual(last_input, 900)
+                # 触发线 = 900/1000 >= 0.5? 默认窗口256000不触发；用 status 断言已记账
+                st = body.continuity_status("s")
+                self.assertGreater(st["last_input"], 0)
+            finally:
+                body.close()
+
+    def test_chat_falls_back_to_proxy_when_no_usage(self):
+        from agent_body.runtime import Body
+
+        class FakePort:
+            def chat(self, msg, person_id=None): return "ok"
+            def recall(self, q, k=10): return []
+            def remember(self, c, scope="", tier="", **kw): return "id"
+            def save(self): pass
+            def close(self): pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            work = Path(tmp) / "work"
+            body = Body(data, work, mode="unrestricted")
+            try:
+                body.brains["s"] = FakePort()
+                body.chat("s", "你好")
+                last_input = body.budget.session_usage("s")["last_input"]
+                self.assertGreater(last_input, 0)   # 用身体构造的精简 prompt 兜底
+            finally:
+                body.close()
+
 
 if __name__ == "__main__":
     unittest.main()

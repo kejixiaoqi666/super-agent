@@ -126,6 +126,14 @@ class SuperBrainAdapter(BrainPort):
         return self._require_brain().chat(
             message, person_id=person_id or self._session, images=images)
 
+    def usage(self) -> dict:
+        """当轮真实 token 用量（内核向量压缩后喂给模型的输入）——供自动续接判断。"""
+        try:
+            return self._require_brain().usage()
+        except Exception:
+            return {"prompt_tokens": 0, "completion_tokens": 0,
+                    "total_tokens": 0, "calls": 0}
+
     def remember(self, content, scope="user", tier="recall", **kw):
         return self._brain.remember(content, scope=scope, tier=tier, **kw)
 
