@@ -2,7 +2,7 @@
 
 import unittest
 
-from agent_body.router import Router
+from agent_body.router import Router, needs_live_data
 
 
 class _FakeLLM:
@@ -44,6 +44,16 @@ class RouterTest(unittest.TestCase):
         route, ans = r.classify("x")
         self.assertEqual(route, "direct")
         self.assertIn('"你好"', ans)
+
+
+class LiveDataTest(unittest.TestCase):
+    def test_live_data_detected(self):
+        for q in ("BTC现在多少钱", "今天北京的天气", "最新新闻", "美元兑人民币汇率"):
+            self.assertTrue(needs_live_data(q), q)
+
+    def test_non_live_data_not_detected(self):
+        for q in ("帮我写一首诗", "你好", "什么是递归", "解释一下量子纠缠"):
+            self.assertFalse(needs_live_data(q), q)
 
 
 if __name__ == "__main__":

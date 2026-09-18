@@ -170,7 +170,7 @@ def serve(body):
                 continue
 
             # ---- ③ 大模型路由：输入先调大模型快速判断简单/复杂 ----
-            from .router import Router
+            from .router import Router, needs_live_data, live_answer
             from superbrain2.core.llm import from_env as _env_llm
             if _get_router() is None:
                 try:
@@ -178,6 +178,14 @@ def serve(body):
                 except Exception:
                     pass
             rt = _get_router()
+
+            # ---- ③.5 实时数据问题 → 联网搜索简洁作答(不再打太极) ----
+            if rt is not None and needs_live_data(text):
+                _la = live_answer(rt._llm, text)
+                if _la:
+                    api("sendMessage", chat_id=chat["id"], text=_la)
+                    continue
+
             if rt is not None:
                 _route, _ans = rt.classify(text)
                 if _route == "direct":      # 不需过超脑 → 直接简短回答

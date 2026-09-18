@@ -51,3 +51,37 @@ class Router:
         if route == "direct" and ans.strip():
             return "direct", ans.strip()
         return "brain", ""          # 非 direct/无答案 → 过超脑, 安全
+
+
+# ---- 实时数据检测：要联网拿"当下"信息的问题（价格/行情/天气/新闻…）----
+_LIVE_HINTS = re.compile(
+    r"(价格|行情|多少钱|汇率|油价|股价|币价|天气|温度|新闻|热搜|最新消息|现在几|当前|实时|"
+    r"BTC|比特币|ETH|以太坊|美元|人民币|首富|选举|比分|金牌|排名|奥运会|世界杯|股市|"
+    r"涨停|跌停|利率|通胀|GDP|失业率)")
+
+
+def needs_live_data(text: str) -> bool:
+    """是否要实时/联网数据才能回答（含行情、天气、新闻等)。"""
+    return bool(_LIVE_HINTS.search(text))
+
+
+def live_answer(llm, text: str, max_tokens: int = 240) -> str:
+    """联网搜索实时数据 → 大模型简洁总结成答案(带来源)。失败返回空串(回退)。"""
+    try:
+        from .web import web_search
+        hits = web_search(text, limit=5)
+    except Exception:
+        return ""
+    if not hits:
+        return ""
+    src = "\n".join(f"- {h.get('title','')}: {h.get('snippet','')}"
+                    for h in hits[:5])
+    prompt = ("根据以下网络搜索结果, 用中文简洁回答用户问题(120字内), 最后标注来源。"
+              "若结果不含答案就说'未查到, 以下是相关来源'。\n"
+              f"问题: {text}\n搜索结果:\n{src}")
+    try:
+        r = llm.chat([{"role": "user", "content": prompt}], max_tokens=max_tokens)
+        return (r.content or "").strip()
+    except Exception:
+        return ""
+
