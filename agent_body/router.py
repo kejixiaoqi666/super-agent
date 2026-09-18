@@ -68,7 +68,7 @@ def needs_live_data(text: str) -> bool:
 # ---- 本机特权请求检测：读本机硬件/文件/执行命令 → 硬拒绝(不依赖模型) ----
 _LOCAL_TOPIC = re.compile(
     r"(硬件|本机|服务器信息|内存|磁盘|CPU|显卡|网卡|进程|文件系统|系统信息|主机名|序列号|"
-    r"分区|内核版本|uname|lsblk|lspci|dmidecode|hostnamectl)")
+    r"分区|内核版本|uname|lscpu|lsblk|lspci|dmidecode|hostnamectl|free|df)\b")
 _LOCAL_VERB = re.compile(r"(查|看|读|运行|执行|信息|多少|什么|用|列)")
 
 
