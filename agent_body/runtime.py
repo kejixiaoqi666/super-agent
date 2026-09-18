@@ -63,6 +63,8 @@ class Body:
             continuity_at=self.budget.continuity_at)
         # 执行 daemon（懒加载：仅首次用到才建，不常驻占内存）
         self._executor = None
+        # 主权开放（懒加载）：自进化 / 自我修改 / 内核门
+        self._sovereign = None
         # Phase 4 存储/资产/图片 + Phase 5 密码本
         self.storage = Storage(data_dir)
         self.assets = AssetStore(self.storage)
@@ -479,11 +481,38 @@ class Body:
     def run_scripts(self, commands: List[str], runtime: str = "shell",
                     timeout_s: float = 60.0, pool_size: int = 4,
                     mem_limit_mb: Optional[int] = None) -> List[dict]:
-        """批量执行多个脚本（同运行时），高并发调度，保持输入顺序，返回结构化结果。"""
+        """批量执行多个脚本（同运行时），高并发调度，保持输入顺序，返回结构化结果。
+        失败的任务自动记录为自进化观察(error)，供后续提案优化。
+        """
         from .exec.daemon import Task
         tasks = [Task(runtime=runtime, command=c, timeout_s=timeout_s,
                       mem_limit_mb=mem_limit_mb) for c in commands]
-        return [r.to_dict() for r in self.executor(pool_size).run_many(tasks)]
+        results = [r.to_dict() for r in self.executor(pool_size).run_many(tasks)]
+        # 自进化：执行错误自动入观察（AI 后续可思考成优化提案）——带可用于修复的诊断
+        try:
+            evo = self.evolution()
+            for r in results:
+                if r.get("status") != "done":
+                    outp = (r.get("output") or "").strip().replace("\n", " ")[:200]
+                    detail = (f"{r.get('error_class')}: {outp}"
+                              if outp else (r.get("error_msg") or "执行失败"))
+                    evo.observe("error", detail,
+                                source="exec", task_id=r.get("task_id"),
+                                error_class=r.get("error_class"))
+        except Exception:
+            pass
+        return results
+
+    def sovereign(self):
+        """懒加载主权开放统一入口（插件自由区 + 内核门 + 自我修改 + 自进化）。"""
+        if self._sovereign is None:
+            from .sovereign import Sovereign as _Sov
+            self._sovereign = _Sov(self.data_dir)
+        return self._sovereign
+
+    def evolution(self):
+        """懒加载自进化思考（观察/提案/批准/执行）。"""
+        return self.sovereign().evolution
 
     def chat_image(self, session: str, image: Union[str, Path, bytes],
                    message: str = "看看这张图", person_id=None) -> dict:

@@ -1,0 +1,94 @@
+"""自进化思考 阶段③ 测试：观察 → 思考提案 → 批准 → 才执行。
+
+核心硬约束（用户定调）：**未 approved 的提案不得 apply**。
+"""
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from agent_body.evolution import Evolution
+
+
+class EvolutionTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ev = Evolution(Path(self.tmp.name) / "data")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    # ---- 观察 ----
+    def test_observe_records(self):
+        o1 = self.ev.observe("error", "执行超时", source="daemon")
+        self.ev.observe("pain", "重复手动审批", source="cli")
+        self.ev.observe("optimization", "脚本可并行")
+        self.ev.observe("iteration", "Autopilot 可接安卓")
+        self.assertEqual(len(self.ev.observations()), 4)
+        self.assertEqual(self.ev.observations("error")[0]["oid"], o1["oid"])
+
+    def test_observe_unknown_kind_rejected(self):
+        with self.assertRaises(ValueError):
+            self.ev.observe("hack", "x")
+
+    # ---- 提案 + 批准才执行（核心不变量） ----
+    def test_cannot_apply_before_approve(self):
+        p = self.ev.propose("执行", target="daemon", suggestion="加大超时")
+        # 未批准 apply → 硬拒绝
+        res = self.ev.apply(p["pid"])
+        self.assertFalse(res["ok"])
+        self.assertIn("未批准", res["error"])
+
+    def test_approve_then_apply(self):
+        p = self.ev.propose("执行", target="daemon", suggestion="加大超时")
+        applied = []
+        ap = self.ev.approve(p["pid"])
+        self.assertTrue(ap["ok"])
+        res = self.ev.apply(p["pid"], executor=lambda prop: applied.append(prop))
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["state"], "applied")
+        self.assertEqual(len(applied), 1)          # 真实落地被调用
+
+    def test_illegal_transition_blocked(self):
+        p = self.ev.propose("执行", target="x", suggestion="y")
+        # 直接 rejected→applied 非法
+        self.ev.reject(p["pid"])
+        r = self.ev.apply(p["pid"])               # rejected 后 apply
+        self.assertFalse(r["ok"])
+        self.assertIn("未批准", r["error"])
+
+    def test_body_run_scripts_auto_observes_errors(self):
+        """日常使用：执行失败自动记录为自进化观察(error)。"""
+        from agent_body.runtime import Body
+        with tempfile.TemporaryDirectory() as td:
+            body = Body(Path(td) / "data", Path(td) / "work", mode="unrestricted")
+            try:
+                res = body.run_scripts(["print('hi')", "def f(:"], runtime="python")
+                self.assertEqual(res[0]["status"], "done")
+                self.assertNotEqual(res[1]["status"], "done")
+                # 失败任务已入自进化观察
+                errs = body.evolution().observations("error")
+                self.assertTrue(any("SyntaxError" in (o["detail"] or "")
+                                    for o in errs))
+            finally:
+                body.close()
+
+    def test_approve_only_from_pending(self):
+        p = self.ev.propose("执行", target="x", suggestion="y")
+        self.ev.reject(p["pid"])
+        r = self.ev.approve(p["pid"])             # rejected→approved 非法
+        self.assertFalse(r["ok"])
+
+    # ---- 从观察聚合提案 ----
+    def test_propose_from_observations_priority_and_refs(self):
+        self.ev.observe("error", "执行超时", source="daemon")
+        self.ev.observe("pain", "执行低效")
+        p = self.ev.propose_from_observations(
+            "执行", target="daemon", suggestion="优化")
+        self.assertEqual(p["priority"], "high")    # 含 error → 高优先级
+        self.assertTrue(p["refs"])                 # 自动回填观察 oid
+        self.assertEqual(p["state"], "pending_approval")
+
+
+if __name__ == "__main__":
+    unittest.main()

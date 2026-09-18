@@ -27,6 +27,9 @@ class Sovereign:
         self.plugins = PluginRegistry(self.data_dir)
         self.gate = KernelReadOnlyGate(self.data_dir)
         self.self_mod = SelfMod(self.data_dir, gate=self.gate)
+        # 自进化思考（观察/提案/批准/执行）
+        from ..evolution import Evolution as _Evo
+        self.evolution = _Evo(self.data_dir)
 
     # ---- 插件自由区 ----
     def install_plugin(self, plugin: Plugin) -> dict:
