@@ -33,6 +33,9 @@ class Sovereign:
         # 升级治理队（底层进化正规通道：文档存档→门禁→测试→并入）
         from .upgrade_queue import UpgradeQueue as _UQ
         self.upgrade_queue = _UQ(self.data_dir)
+        # 信任模式（guided 用户主导 / sovereign AI 主权）
+        from .trust import TrustMode as _TM
+        self.trust = _TM(self.data_dir)
 
     # ---- 插件自由区 ----
     def install_plugin(self, plugin: Plugin) -> dict:

@@ -75,7 +75,7 @@
 | ③ 自进化思考 | evolution/：observer观察记录 → proposer思考提案 → ledger库 → approval批准闸门（批准才执行） ✅ |
 | ④ 升级治理 | sovereign/upgrade_queue：需求文档存档→排队→门禁→测试→并入 ✅ |
 | ⑤ 层面一开放 | 完整上下文/全量工具/思考进化循环接到 AI 自主 |
-| ⑥ 信任模式 | guided vs sovereign 切换 |
+| ⑥ 信任模式 | guided vs sovereign 切换（只改 AI 自主体验, 硬约束不随 mode 变） ✅ |
 
 ## 10. 验证纪律
 - 内核只读：AI 尝试写内核 → 断言被拒并提示走升级队列（不是静默失败）

@@ -238,5 +238,48 @@ class UpgradeQueueTest(unittest.TestCase):
         self.assertFalse(res["ok"])
 
 
+class TrustModeTest(unittest.TestCase):
+    """阶段⑥ 信任模式：guided/sovereign 切换 + 持久化 + 硬约束不因 mode 改变。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name) / "data"
+        self.s = Sovereign(self.data)
+        self.t = self.s.trust
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_default_guided(self):
+        self.assertEqual(self.t.get(), "guided")
+        self.assertTrue(self.t.is_guided())
+        self.assertFalse(self.t.is_sovereign())
+
+    def test_switch_and_persist(self):
+        self.assertTrue(self.t.set("sovereign")["ok"])
+        self.assertEqual(self.t.get(), "sovereign")
+        self.assertTrue(self.t.is_sovereign())
+        # 新建实例读回持久化
+        t2 = Sovereign(self.data).trust
+        self.assertEqual(t2.get(), "sovereign")
+
+    def test_unknown_mode_rejected(self):
+        res = self.t.set("anarchy")
+        self.assertFalse(res["ok"])
+
+    def test_hard_constraints_not_mode_dependent(self):
+        # 无论 guided 还是 sovereign，内核只读 + 底层批准都不变
+        for mode in ("guided", "sovereign"):
+            self.t.set(mode)
+            au = self.t.autonomy()
+            self.assertTrue(au["kernel_readonly"])
+            self.assertTrue(au["base_requires_approval"])
+            self.assertTrue(au["upper_autonomous"])
+            # 内核写仍被 gate 拒
+            res = self.s.check_write(str(Path("agent_body/budget.py")))
+            self.assertFalse(res["allowed"])
+            self.assertEqual(res["zone"], "kernel")
+
+
 if __name__ == "__main__":
     unittest.main()
