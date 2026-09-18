@@ -11,6 +11,20 @@ import urllib.request
 
 from . import config as cfg
 
+# 惰性全局路由器(用 body 所用模型做轻量简单/复杂判断)
+_router = None
+
+
+def _get_router():
+    """取全局路由器(仅首次构造)。"""
+    return _router
+
+
+def _set_router(r):
+    global _router
+    _router = r
+
+
 _HELP = """可用命令（快速操作，都是调 Body 能力面）:
 /start /help   本帮助
 /new            新建会话(跨会话重建, 自动带前文; 新会话号 telegram:<id>#N)
@@ -148,12 +162,28 @@ def serve(body):
                 api("sendMessage", chat_id=chat["id"], text=reply)
                 continue
 
-            # ---- ② 轻量快通道：简单消息不经过大脑，纯规则秒回 ----
+            # ---- ② 轻量快通道：极简单规则零网络秒回 ----
             from .fastpath import fast_reply
             quick = fast_reply(text)
             if quick is not None:
                 api("sendMessage", chat_id=chat["id"], text=quick)
                 continue
+
+            # ---- ③ 大模型路由：输入先调大模型快速判断简单/复杂 ----
+            from .router import Router
+            from superbrain2.core.llm import from_env as _env_llm
+            if _get_router() is None:
+                try:
+                    _set_router(Router(_env_llm()))
+                except Exception:
+                    pass
+            rt = _get_router()
+            if rt is not None:
+                _route, _ans = rt.classify(text)
+                if _route == "direct":      # 不需过超脑 → 直接简短回答
+                    api("sendMessage", chat_id=chat["id"], text=_ans)
+                    continue
+            # 需过超脑/判不了 → 交给超脑完整认知管线(真流式)
 
             # ---- ③ 普通对话：真·流式回复（首个 token 秒显，同 Hermes 打字效果）----
             try:
