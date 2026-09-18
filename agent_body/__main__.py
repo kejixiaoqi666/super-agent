@@ -68,6 +68,10 @@ def main():
     parser.add_argument("--mode", choices=["read-only", "workspace", "unrestricted"], default="workspace")
     parser.add_argument("--session", default="local")
     parser.add_argument("--telegram", action="store_true")
+    parser.add_argument("--daemon", action="store_true",
+                        help="Headless 常驻：后台 tick+自运维+处理待办, 供 systemd 自启")
+    parser.add_argument("--interval", type=float, default=60.0,
+                        help="daemon 心跳间隔秒(默认60)")
     parser.add_argument("--vault-master", default=None,
                         help="密码本主密码（不落盘，仅用于派生加密密钥）；缺省则 vault 命令不可用")
     args = parser.parse_args()
@@ -78,6 +82,9 @@ def main():
         if args.telegram:
             from .telegram import serve
             serve(body)
+        elif args.daemon:
+            from . import daemon as _daemon
+            _daemon.serve(body, session=args.session, interval=args.interval)
         else:
             print("AgentWorkbench / SuperBrain 2.0. /quit /state /tick")
             while True:

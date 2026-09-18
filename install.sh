@@ -79,8 +79,11 @@ else
 fi
 
 # ---- 5. 常驻服务 + systemd 自启 ----
-run_telegram=0
-[ "${SA_TELEGRAM:-1}" = "1" ] && run_telegram=1
+# 默认 headless daemon(免 bot token 也能后台自治运行); SA_TELEGRAM=1 切 telegram 服务
+engine_args="--daemon --interval 28"
+run_engine=0
+if [ "${SA_TELEGRAM:-0}" = "1" ]; then engine_args="--telegram"; fi
+if [ "${SA_TELEGRAM:-0}" = "1" ] || [ "${SA_DAEMON:-1}" = "1" ]; then run_engine=1; fi
 en_sysd=0
 [ "${SA_ENABLE_SYSTEMD:-1}" = "1" ] && en_sysd=1
 if [ "$en_sysd" = "1" ]; then
@@ -95,7 +98,7 @@ After=network.target
 Type=simple
 WorkingDirectory=$BASE
 EnvironmentFile=$DATA/.env
-ExecStart=$VENV/bin/sa --telegram --kernel $BRAIN/python --data $DATA --workspace $WS --mode $MODE
+ExecStart=$VENV/bin/sa --kernel $BRAIN/python --data $DATA --workspace $WS --mode $MODE $engine_args
 Restart=always
 RestartSec=5
 [Install]
@@ -103,7 +106,7 @@ WantedBy=default.target
 EOF
   systemctl --user daemon-reload >/dev/null 2>&1 || true
   systemctl --user enable super-agent.service >/dev/null 2>&1 || true
-  if [ "$run_telegram" = "1" ]; then
+  if [ "$run_engine" = "1" ]; then
     systemctl --user restart super-agent.service >/dev/null 2>&1 || true
     loginctl enable-linger "$USER" >/dev/null 2>&1 || true   # 免登录自启
   fi
@@ -122,11 +125,10 @@ K="$BRAIN/python/superbrain2"
 cat <<'EOF'
 
 ════════════════════════════════════════════════════
-✅ 完全体已装好。接着:
-   1. 编辑  $DATA/.env  填入 Telegram token
-   2. 启动  systemctl --user start super-agent
-   3. 看日志 systemctl --user status super-agent
-   4. 交互  $VENV/bin/sa   (或 .venv/bin/sa --telegram)
+✅ 完全体已装好, 默认以 headless daemon 后台常驻自启(无需 bot)。
+   2. 看运行: systemctl --user status super-agent
+   3. 交互:    $VENV/bin/sa
+   4. Telegram: 设 SA_TELEGRAM=1 重跑脚本, 或填 token 后手动切 telegram 模式
 
 可选(单独挨个装, 不阻塞完全体):
    · embedding 真语义模型: $VENV/bin/pip install -e "$BRAIN[embedding]"  # onnxruntime+tokenizers
