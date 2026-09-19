@@ -195,8 +195,20 @@ def serve(body):
 
         if rt is not None:
             _route, _ans = rt.classify(text)
-            if _route == "direct":      # 不需过超脑 → 直接简短回答
+            if _route == "direct":
                 api("sendMessage", chat_id=chat["id"], text=_ans)
+                return
+            if _route == "task":
+                # L2: 自主执行——唤醒自主机制, 派发后台任务(不阻塞对话)
+                try:
+                    r = body.run_task(text, session=session)
+                    tid = (r.get("task_id") or r.get("id") or "") if isinstance(r, dict) else str(r)
+                    api("sendMessage", chat_id=chat["id"],
+                        text=f"已作为自主任务派发(ID {tid})，后台执行中。\n"
+                             f"输入 /tasks 看进度，/resume 恢复，/pending 看待办。")
+                except Exception as e:
+                    logging.warning("run_task 派发失败", exc_info=True)
+                    api("sendMessage", chat_id=chat["id"], text=f"派发自主任务失败: {e}")
                 return
 
         # ---- ④ 需过超脑 → 完整认知管线(可靠工具执行, 真能力) ----

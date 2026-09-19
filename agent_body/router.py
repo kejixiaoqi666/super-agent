@@ -17,12 +17,15 @@ import re
 from typing import Tuple
 
 
-_ROUTER_PROMPT = """你是消息路由器。只判断: 这条消息【需不需要过超脑】。
-过超脑 = 要用超脑的记忆/长期上下文/工具(查IP/服务器/执行/分析/自主任务/部署/代码操作/记忆里的事)。
-不过超脑 = 普通问答/闲聊/写作/解释/翻译/建议等, 直接用普通模型即可回答。
-只输出 JSON:
-- 不需要过超脑 → {"route":"direct","answer":"直接的回答"}
-- 需要过超脑 → {"route":"brain"}
+_ROUTER_PROMPT = """你是消息路由器。判断这条消息【应该走哪一级处理】, 只输出 JSON。
+三个级别:
+- "direct" 直接答: 普通问答/闲聊/解释/翻译/建议, 一句话能答, 不需查资料/工具/执行。→ {"route":"direct","answer":"直接回答"}
+- "brain" 过超脑: 要用记忆/长期上下文/工具(查资料/分析/读本机等)。→ {"route":"brain"}
+- "task" 自主执行: 明确的执行/操作/动手工作(做的事/修东西/部署/写代码/持续监控/定时/按步骤完成任务/自己调查解决)。→ {"route":"task"}
+只输出一个 JSON 对象:
+- direct → {"route":"direct","answer":"简短直接的回答"}
+- brain →{"route":"brain"}
+- task → {"route":"task"}
 用户消息: {text}"""
 
 
@@ -50,7 +53,9 @@ class Router:
             ans = json.loads('"' + a.group(1) + '"')      # 还原转义
         if route == "direct" and ans.strip():
             return "direct", ans.strip()
-        return "brain", ""          # 非 direct/无答案 → 过超脑, 安全
+        if route == "task":
+            return "task", ""   # 自主执行: 交给 run_task 唤醒自主机制
+        return "brain", ""          # 非 direct/task → 过超脑, 安全
 
 
 # ---- 实时数据检测：要联网拿"当下"信息的问题（价格/行情/天气/新闻…）----

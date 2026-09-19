@@ -29,6 +29,11 @@ class RouterTest(unittest.TestCase):
         route, ans = r.classify("查一下这个IP 1.2.3.4")
         self.assertEqual(route, "brain")
 
+    def test_task_route(self):
+        r = self._r('{"route":"task"}')
+        route, ans = r.classify("帮我部署个服务器并监控它")
+        self.assertEqual(route, "task")
+
     def test_bad_json_defaults_brain_safe(self):
         r = self._r("随便说点什么，不是 JSON")
         route, ans = r.classify("abc")
