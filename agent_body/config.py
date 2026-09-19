@@ -47,30 +47,40 @@ def load(env_path: str | Path | None = None) -> dict:
     return cfg
 
 
-# ---- 高级功能开关（能力保留·默认收敛）----
-# 这些能力都保留、可一键开；默认关，避免默认状态背负复杂度(不困扰/易维护)。
+# ---- 高级功能开关（能力保留·路由按需启用）----
+# 三态: auto(默认) = 功能可用, 由路由按任务需要自动启用; on=强制开; off=强制关。
+# 这样平时走轻量路径不背负担, 万一需要时能力都在(由路由唤醒), 不默认废掉任何功能。
 FEATURE_DEFAULTS = {
-    "sovereign": False,        # 主权开放(插件/自进化/升级治理)
-    "self_evolution": False,   # 自进化思考(观察/提案/自主目标/自主进化)
-    "self_ops": False,         # 自运维/自测/自主tick
-    "router": False,           # 大模型路由(direct/brain 分流)
-    "streaming": False,        # 流式出字
+    "sovereign": "auto",        # 主权开放(插件/自进化/升级治理)
+    "self_evolution": "auto",   # 自进化思考(观察/提案/自主目标/自主进化)
+    "self_ops": "auto",         # 自运维/自测/自主tick
+    "router": "auto",           # 大模型路由(direct/brain 分流)
+    "streaming": "auto",        # 流式出字
 }
+_TRUE = {"1", "true", "yes", "on"}
 
 
 def features(env_path: str | Path | None = None) -> dict:
-    """读取功能开关。env 里 FEATURE_<名>=1 开启，否则默认关。"""
+    """读取功能开关状态: 返回 {名: "auto"|"on"|"off"}。FEATURE_<名>=0 强制关, =1 强制开, 缺省 auto。"""
     cfg = load(env_path)
     out = {}
     for name, default in FEATURE_DEFAULTS.items():
         v = cfg.get(f"FEATURE_{name.upper()}")
-        out[name] = (str(v).strip().lower() in ("1", "true", "yes", "on")) \
-            if v is not None else default
+        if v is None:
+            out[name] = default
+        else:
+            s = str(v).strip().lower()
+            out[name] = "on" if s in _TRUE else ("off" if s in ("0", "false", "no", "off") else default)
     return out
 
 
+def feature_state(name: str, env_path: str | Path | None = None) -> str:
+    return features(env_path).get(name, "auto")
+
+
 def feature_enabled(name: str, env_path: str | Path | None = None) -> bool:
-    return features(env_path).get(name, False)
+    """是否启用（on 或 auto）。具体是否真的动用，由路由/调用方按需决定。"""
+    return features(env_path).get(name, "auto") != "off"
 
 
 def get_secret(key: str) -> str:
