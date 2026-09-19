@@ -47,6 +47,32 @@ def load(env_path: str | Path | None = None) -> dict:
     return cfg
 
 
+# ---- 高级功能开关（能力保留·默认收敛）----
+# 这些能力都保留、可一键开；默认关，避免默认状态背负复杂度(不困扰/易维护)。
+FEATURE_DEFAULTS = {
+    "sovereign": False,        # 主权开放(插件/自进化/升级治理)
+    "self_evolution": False,   # 自进化思考(观察/提案/自主目标/自主进化)
+    "self_ops": False,         # 自运维/自测/自主tick
+    "router": False,           # 大模型路由(direct/brain 分流)
+    "streaming": False,        # 流式出字
+}
+
+
+def features(env_path: str | Path | None = None) -> dict:
+    """读取功能开关。env 里 FEATURE_<名>=1 开启，否则默认关。"""
+    cfg = load(env_path)
+    out = {}
+    for name, default in FEATURE_DEFAULTS.items():
+        v = cfg.get(f"FEATURE_{name.upper()}")
+        out[name] = (str(v).strip().lower() in ("1", "true", "yes", "on")) \
+            if v is not None else default
+    return out
+
+
+def feature_enabled(name: str, env_path: str | Path | None = None) -> bool:
+    return features(env_path).get(name, False)
+
+
 def get_secret(key: str) -> str:
     """取单个配置值（敏感项也从 .env/环境取）。"""
     return load().get(key, "")
