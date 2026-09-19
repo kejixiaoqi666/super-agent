@@ -62,19 +62,11 @@ class TaskQueue:
             return {}
 
     def _save(self) -> None:
-        import json
+        from ..persist import json_atomic_write
         self.dir.mkdir(parents=True, exist_ok=True)
-        tmp = self.dir / "pending.tmp"
-        tmp.write_text(json.dumps(
-            {"items": [i.to_dict() for i in self._queue], "at": time.time()},
-            ensure_ascii=False), encoding="utf-8")
-        tmp.chmod(0o600)
-        tmp.replace(self.dir / "pending.json")
-        ctmp = self.dir / "chains.tmp"
-        ctmp.write_text(json.dumps(self._chains, ensure_ascii=False),
-                        encoding="utf-8")
-        ctmp.chmod(0o600)
-        ctmp.replace(self.dir / "chains.json")
+        json_atomic_write(self.dir / "pending.json",
+                          {"items": [i.to_dict() for i in self._queue], "at": time.time()})
+        json_atomic_write(self.dir / "chains.json", self._chains)
 
     # ---- 队列操作 ----
     def enqueue(self, chain_id: str, tasks: List[str]) -> None:

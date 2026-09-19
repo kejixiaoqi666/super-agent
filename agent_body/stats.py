@@ -49,13 +49,8 @@ class TokenStats:
                 self._rows = []
 
     def save(self) -> None:
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._rows, ensure_ascii=False), encoding="utf-8")
-        try:
-            tmp.chmod(0o600)
-        except Exception:
-            pass
-        tmp.replace(self.path)
+        from .persist import json_atomic_write
+        json_atomic_write(self.path, self._rows)
 
     def record(self, session: str, input_text: str, output_text: str,
                model: str = "default", price: Optional[tuple] = None,

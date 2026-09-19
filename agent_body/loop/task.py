@@ -156,12 +156,8 @@ class TaskStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, task: TaskState) -> None:
-        path = self.dir / f"{task.task_id}.json"
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(task.to_dict(), ensure_ascii=False),
-                       encoding="utf-8")
-        tmp.chmod(0o600)
-        tmp.replace(path)
+        from ..persist import json_atomic_write
+        json_atomic_write(self.dir / f"{task.task_id}.json", task.to_dict())
 
     def load(self, task_id: str) -> Optional[TaskState]:
         path = self.dir / f"{task_id}.json"

@@ -134,11 +134,8 @@ class CronScheduler:
                 self.jobs = {}
 
     def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(self.jobs, ensure_ascii=False, indent=2),
-                       encoding="utf-8")
-        tmp.replace(self.path)
+        from .persist import json_atomic_write
+        json_atomic_write(self.path, self.jobs)
 
     def add(self, job_id: str, spec: str, runner: Optional[JobRunner] = None,
             payload: Optional[dict] = None) -> dict:

@@ -35,12 +35,9 @@ class ProjectContext:
                 pass
 
     def _save(self) -> None:
+        from .persist import json_atomic_write
         self.data["updated_at"] = time.time()
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, ensure_ascii=False),
-                       encoding="utf-8")
-        tmp.chmod(0o600)
-        tmp.replace(self.path)
+        json_atomic_write(self.path, self.data)
 
     # ---- 状态 ----
     @property
